@@ -9,6 +9,9 @@ package analyze
 import (
 	"context"
 	"encoding/json"
+	"strconv"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
@@ -90,6 +93,38 @@ func PayloadStringMap(p map[string]any, key string) (map[string]string, bool) {
 		return out, true
 	}
 	return nil, false
+}
+
+// PayloadFloat reads a float64 field tolerating live (float64/int64), JSON
+// (float64), and string-encoded ("4.10e+08") payloads.
+func PayloadFloat(p map[string]any, key string) (float64, bool) {
+	switch v := p[key].(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	case string:
+		f, err := strconv.ParseFloat(v, 64)
+		return f, err == nil
+	}
+	return 0, false
+}
+
+// ParseBytes converts a Kubernetes resource quantity string ("1Gi", "512Mi")
+// to bytes. Returns false on malformed input.
+func ParseBytes(s string) (int64, bool) {
+	q, err := resource.ParseQuantity(s)
+	if err != nil {
+		return 0, false
+	}
+	return q.Value(), true
 }
 
 // Registry holds the analyzers wired into an engine instance.

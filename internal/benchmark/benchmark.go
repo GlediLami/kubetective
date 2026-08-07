@@ -18,6 +18,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/record"
+	"github.com/kubedoctor/kubedoctor/internal/score"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
@@ -47,6 +48,11 @@ type Result struct {
 	TopHypothesis string
 	Score         float64
 	Status        string
+	// Margin and Correct feed confidence calibration (docs/DESIGN.md §9.4):
+	// did the top hypothesis match ground truth, and at what margin?
+	Margin  float64
+	Correct bool
+	HasTruth bool
 }
 
 func (r *Result) Fail(format string, args ...any) {
@@ -97,6 +103,11 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 		} else {
 			res.TopHypothesis = top.Claim
 			res.Score = top.Score.Score
+			if gt.TopHypothesisCategory != "" {
+				res.HasTruth = true
+				res.Margin = top.Score.Margin
+				res.Correct = string(top.Category) == gt.TopHypothesisCategory
+			}
 			if gt.TopHypothesisCategory != "" && string(top.Category) != gt.TopHypothesisCategory {
 				res.Fail("top hypothesis category = %s, want %s", top.Category, gt.TopHypothesisCategory)
 			}
@@ -155,13 +166,20 @@ func hasAnalyzer(fs []model.Finding, id string) bool {
 	return false
 }
 
+// SuiteResult bundles per-scenario results with the confidence calibration
+// computed across all scenarios that carry ground truth.
+type SuiteResult struct {
+	Results     []Result
+	Calibration *score.CalibrationReport // nil when no scenario carries truth
+}
+
 // EngineFactory builds an engine with the given collectors wired (plus the
 // analyzer set). Used by the suite to give each scenario its own replay data.
 type EngineFactory func(collectors ...collect.Collector) api.Investigator
 
 // RunSuite replays every scenario under scenariosDir and returns per-scenario
-// results in name order.
-func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) ([]Result, error) {
+// results in name order, plus the calibration report.
+func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (*SuiteResult, error) {
 	entries, err := os.ReadDir(scenariosDir)
 	if err != nil {
 		return nil, err
@@ -174,7 +192,7 @@ func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (
 	}
 	sort.Strings(dirs)
 
-	var results []Result
+	out := &SuiteResult{}
 	for _, d := range dirs {
 		dir := filepath.Join(scenariosDir, d)
 		sc, err := LoadScenario(filepath.Join(dir, "scenario.yaml"))
@@ -190,7 +208,19 @@ func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, *r)
+		out.Results = append(out.Results, *r)
 	}
-	return results, nil
+
+	// Calibration across all scenarios with ground truth (temperature fit).
+	var points []score.CalibrationPoint
+	for _, r := range out.Results {
+		if r.HasTruth {
+			points = append(points, score.CalibrationPoint{Margin: r.Margin, Correct: r.Correct})
+		}
+	}
+	if len(points) > 0 {
+		rep := score.Calibrate(points)
+		out.Calibration = &rep
+	}
+	return out, nil
 }

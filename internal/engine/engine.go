@@ -66,6 +66,9 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	var observations []model.Observation
 	var sources []string
 	for _, c := range e.collectors.All() {
+		// Staged collection: later collectors (e.g. Prometheus) derive their
+		// targets from earlier collectors' output (docs/DESIGN.md §8.2).
+		scopePlan.Prior = observations
 		obs, refs, err := c.Collect(ctx, scopePlan)
 		if err != nil {
 			gaps = append(gaps, model.EvidenceGap{
@@ -94,7 +97,8 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 
 	// Change detection needs the structural graph (OWNS/RUNS_ON) for ranking.
 	structural := graph.Build(observations, nil, nil, graph.Options{MaxNodes: scopeMaxNodes(req)})
-	changes := change.Rank(change.Detect(observations, req.Window.Start), structural, req.Target, onsetTs, windowSpan(req))
+	changes := change.Rank(change.Detect(observations, req.Window.Start), structural, req.Target, onsetTs, windowSpan(req),
+		func(ch model.Change) float64 { return change.AnomalyScore(observations, ch, 5*time.Minute) })
 	g := graph.Build(observations, changes, anchorEvent(events), graph.Options{MaxNodes: scopeMaxNodes(req)})
 
 	// Stage 4 — analysis: deterministic analyzers emit findings, hypotheses,
@@ -166,27 +170,40 @@ func dedup(obs []model.Observation) []model.Observation {
 }
 
 // statusFromFindings derives the incident status card from analyzer findings.
+// Precedence: node pressure > OOM > image pull > crash loop > pending > probe
+// (the more specific/root-cause finding wins the card).
 func statusFromFindings(fs []model.Finding) string {
-	status := "INVESTIGATED"
+	rank := map[string]int{
+		"nodepressure": 6,
+		"oom":          5,
+		"imagepull":    4,
+		"crashloop":    3,
+		"scheduling":   2,
+		"probe":        1,
+	}
+	best, bestRank := "INVESTIGATED", 0
 	for _, f := range fs {
+		r, ok := rank[f.Analyzer]
+		if !ok || r <= bestRank {
+			continue
+		}
+		bestRank = r
 		switch f.Analyzer {
+		case "nodepressure":
+			best = "NODEPRESSURE"
 		case "oom":
-			status = "OOMKILLED"
-		case "crashloop":
-			if status == "INVESTIGATED" {
-				status = "CRASHLOOPBACKOFF"
-			}
+			best = "OOMKILLED"
 		case "imagepull":
-			if status == "INVESTIGATED" {
-				status = "IMAGEPULLBACKOFF"
-			}
+			best = "IMAGEPULLBACKOFF"
+		case "crashloop":
+			best = "CRASHLOOPBACKOFF"
 		case "scheduling":
-			if status == "INVESTIGATED" {
-				status = "PENDING"
-			}
+			best = "PENDING"
+		case "probe":
+			best = "UNHEALTHY"
 		}
 	}
-	return status
+	return best
 }
 
 func severityFromFindings(fs []model.Finding) model.Severity {

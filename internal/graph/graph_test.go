@@ -12,6 +12,10 @@ func mk(kind string, res model.ResourceRef, payload map[string]any) model.Observ
 	return collect.NewObservation(kind, model.SourceRef{System: "test"}, time.Now(), res, payload, 1.0)
 }
 
+func mkat(kind string, res model.ResourceRef, ts time.Time, payload map[string]any) model.Observation {
+	return collect.NewObservation(kind, model.SourceRef{System: "test"}, ts, res, payload, 1.0)
+}
+
 func TestBuildStructuralEdges(t *testing.T) {
 	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9-abcde"}
 	rs := model.ResourceRef{Kind: "replicaset", Namespace: "prod", Name: "checkout-7f84c9"}
@@ -78,6 +82,39 @@ func TestChangedBeforeEdgesAndHops(t *testing.T) {
 	}
 	if h := Hops(g, pod, model.ResourceRef{Kind: "pod", Name: "unrelated"}); h != -1 {
 		t.Errorf("Hops to unrelated = %d, want -1", h)
+	}
+}
+
+func TestTemporallyCorrelatedEdges(t *testing.T) {
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
+	dep := model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}
+	ch := model.Change{Resource: dep, Timestamp: base.Add(-14 * time.Minute), Description: "checkout v41 → v42"}
+
+	g := Build([]model.Observation{
+		mk("resource.owner", pod, map[string]any{"owner_kind": "Deployment", "owner_name": "checkout"}),
+		mkat("metric.series", pod, base.Add(-13*time.Minute), map[string]any{"first": 4.10e+08, "last": 1.02e+09}),
+		mkat("metric.series", pod, base.Add(-6*time.Hour), map[string]any{"first": 4.10e+08, "last": 1.02e+09}), // too far → no edge
+	}, []model.Change{ch}, nil, Options{})
+
+	found := false
+	for _, e := range g.Edges {
+		if e.Kind == model.EdgeTemporallyCorrelated && e.From == dep && e.To == pod {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("missing TEMPORALLY_CORRELATED dep→pod edge: %v", g.Edges)
+	}
+	// Only one correlated edge: the far series must not correlate.
+	correlated := 0
+	for _, e := range g.Edges {
+		if e.Kind == model.EdgeTemporallyCorrelated {
+			correlated++
+		}
+	}
+	if correlated != 1 {
+		t.Errorf("TEMPORALLY_CORRELATED edges = %d, want 1", correlated)
 	}
 }
 

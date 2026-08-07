@@ -11,12 +11,16 @@ import (
 )
 
 // ScopePlan is what the engine hands a collector: the bounded worklist of
-// resources plus collection options for this investigation.
+// resources plus collection options for this investigation. Prior holds the
+// observations earlier collectors produced (staged collection, docs/DESIGN.md
+// §8.2) — e.g. the Prometheus collector derives pod targets from the
+// Kubernetes collector's pod.state observations.
 type ScopePlan struct {
 	Targets     []model.ResourceRef
 	Window      api.Window
 	Logs        bool
 	MaxLogLines int
+	Prior       []model.Observation
 }
 
 // Collector normalizes one data source into Observations. A collector failure

@@ -49,7 +49,7 @@ func TestRankPrefersTemporalAndOwnership(t *testing.T) {
 		{Resource: other, Timestamp: base.Add(-15 * time.Minute), Description: "configmap unrelated"},
 		{Resource: node, Timestamp: base.Add(-16 * time.Minute), Description: "node thing"},
 	}
-	ranked := Rank(changes, g, pod, base, 30*time.Minute)
+	ranked := Rank(changes, g, pod, base, 30*time.Minute, nil)
 
 	if ranked[0].Resource != dep {
 		t.Fatalf("top change = %v, want deployment checkout (ownership + temporal)", ranked[0].Resource)
@@ -76,6 +76,39 @@ func TestRankPrefersTemporalAndOwnership(t *testing.T) {
 	}
 	if abs(sum-ranked[0].Relevance) > 0.001 {
 		t.Errorf("factors sum = %.3f, want %.3f", sum, ranked[0].Relevance)
+	}
+}
+
+func TestAnomalyScoreCooccurringMetricGrowth(t *testing.T) {
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
+	ch := model.Change{Resource: pod, Timestamp: base.Add(-3 * time.Minute)}
+
+	// Growing series within delta → anomaly 1.0.
+	with := []model.Observation{
+		mk("metric.series", pod, base.Add(-4*time.Minute), map[string]any{"first": 4.10e+08, "last": 1.02e+09}),
+	}
+	if got := AnomalyScore(with, ch, 5*time.Minute); got != 1.0 {
+		t.Errorf("AnomalyScore(growing, near) = %v, want 1.0", got)
+	}
+	// Flat series → no anomaly.
+	flat := []model.Observation{
+		mk("metric.series", pod, base.Add(-4*time.Minute), map[string]any{"first": 4.10e+08, "last": 4.20e+08}),
+	}
+	if got := AnomalyScore(flat, ch, 5*time.Minute); got != 0 {
+		t.Errorf("AnomalyScore(flat, near) = %v, want 0", got)
+	}
+	// Growing but far in time → no anomaly.
+	far := []model.Observation{
+		mk("metric.series", pod, base.Add(-2*time.Hour), map[string]any{"first": 4.10e+08, "last": 1.02e+09}),
+	}
+	if got := AnomalyScore(far, ch, 5*time.Minute); got != 0 {
+		t.Errorf("AnomalyScore(growing, far) = %v, want 0", got)
+	}
+	// Anomaly factor must lift relevance by 0.10.
+	ranked := Rank([]model.Change{ch}, &model.Graph{}, pod, base, 30*time.Minute, func(model.Change) float64 { return 1.0 })
+	if ranked[0].Factors["anomaly"] != 0.10 {
+		t.Errorf("anomaly factor = %v, want 0.10", ranked[0].Factors["anomaly"])
 	}
 }
 

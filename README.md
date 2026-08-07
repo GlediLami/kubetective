@@ -1,11 +1,13 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.2 in progress.** v0.1 shipped: pod/deployment investigations,
-> evidence-backed diagnosis (OOMKilled, CrashLoopBackOff, ImagePull, Pending),
-> JSONL record/replay, scenario benchmark (5 scenarios, incl. healthy negative
-> control). v0.2 landed: bounded evidence graph (OWNS/RUNS_ON/CHANGED_BEFORE),
-> ranked "what changed" detector, owner-chain scope expansion. Next: Prometheus
-> collector, calibration. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: v0.2 — complete.** Evidence graph (OWNS/RUNS_ON/CHANGED_BEFORE/
+> TEMPORALLY_CORRELATED), ranked "what changed" detector with metric-anomaly
+> factor, Prometheus collector (metric evidence: limit breach + growth),
+> scoring calibration (ECE + temperature fit, reported by the benchmark),
+> 6 analyzers (OOM, CrashLoop, ImagePull, Scheduling, NodePressure, Probe),
+> 8-scenario benchmark incl. healthy negative control. Next: adaptive
+> collection (NeedsEvidence), Git/GitOps correlation, LLM explainer.
+> Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
 (`pod/checkout-7f84c9`, `deployment/checkout`, `--since=30m`) it collects facts, builds a
@@ -53,9 +55,9 @@ recorded incident you can replay (`kubedoctor replay <incident-id>`).
 
 | Version | Scope |
 |---|---|
-| v0.1 | Evidence model, k8s collector, OOM/CrashLoop/ImagePull analyzers, timeline, record/replay, CLI, first 3 benchmark scenarios |
-| v0.2 | Evidence graph, scoring + calibration, change detector, Prometheus collector |
-| v0.3 | Adaptive collection, rule-based hypothesis engine, "what changed" ranking |
+| v0.1 | ✅ Evidence model, k8s collector, OOM/CrashLoop/ImagePull analyzers, timeline, record/replay, CLI, first 3 benchmark scenarios |
+| v0.2 | ✅ Evidence graph, scoring + calibration, change detector, Prometheus collector, scheduling/node-pressure/probe analyzers, 8 scenarios |
+| v0.3 | Adaptive collection, rule-based hypothesis engine, "what changed" ranking (done in v0.2 — remaining: adaptive loop) |
 | v0.4 | Git/ArgoCD/Flux correlation, recommendations |
 | v0.5 | LLM explainer (digest-only, local-LLM support) |
 | v0.6+ | REST, MCP server, preview + approved actions, incident memory |

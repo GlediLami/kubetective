@@ -10,8 +10,10 @@
 package graph
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
@@ -21,6 +23,9 @@ type Options struct {
 	MaxNodes int
 	MaxEdges int
 }
+
+// correlateDelta is the co-occurrence window for TEMPORALLY_CORRELATED edges.
+const correlateDelta = 5 * time.Minute
 
 func (o Options) withDefaults() Options {
 	if o.MaxNodes <= 0 {
@@ -126,6 +131,27 @@ func Build(observations []model.Observation, changes []model.Change, onset *mode
 		}
 	}
 
+	// TEMPORALLY_CORRELATED edges: metric movement near a change (weak,
+	// explicitly non-causal — the edge kind says so, docs/DESIGN.md §7.3).
+	for _, ch := range changes {
+		for _, o := range observations {
+			if o.Kind != "metric.series" {
+				continue
+			}
+			if d := o.Timestamp.Sub(ch.Timestamp); d < -correlateDelta || d > correlateDelta {
+				continue
+			}
+			first, _ := payloadFloat(o.Payload, "first")
+			last, _ := payloadFloat(o.Payload, "last")
+			if first <= 0 || last <= first*1.2 {
+				continue
+			}
+			ensureNode(ch.Resource)
+			ensureNode(o.Resource)
+			addEdge(ch.Resource, o.Resource, model.EdgeTemporallyCorrelated, o.ID, 0.6)
+		}
+	}
+
 	// Deterministic ordering for stable output (diff-able replays).
 	sort.Slice(g.Nodes, func(i, j int) bool { return g.Nodes[i].String() < g.Nodes[j].String() })
 	sort.Slice(g.Edges, func(i, j int) bool {
@@ -194,4 +220,20 @@ func str(p map[string]any, key string) string {
 		return strings.TrimSpace(s)
 	}
 	return ""
+}
+
+// payloadFloat reads a float64 payload field (live or JSON-decoded).
+func payloadFloat(p map[string]any, key string) (float64, bool) {
+	switch v := p[key].(type) {
+	case float64:
+		return v, true
+	case int64:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case json.Number:
+		f, err := v.Float64()
+		return f, err == nil
+	}
+	return 0, false
 }

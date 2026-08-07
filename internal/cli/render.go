@@ -118,9 +118,10 @@ func renderJSON(res *api.InvestigationResult) error {
 	return enc.Encode(res)
 }
 
-// renderBenchmark prints the scenario gate table.
-func renderBenchmark(results []benchmark.Result) error {
+// renderBenchmark prints the scenario gate table + confidence calibration.
+func renderBenchmark(suite *benchmark.SuiteResult) error {
 	w := os.Stdout
+	results := suite.Results
 	fmt.Fprintf(w, "%-28s %-8s %-9s %-7s %s\n", "SCENARIO", "STATUS", "SCORE", "TIME", "FAILURES")
 	total, passed := 0, 0
 	for _, r := range results {
@@ -137,6 +138,15 @@ func renderBenchmark(results []benchmark.Result) error {
 		fmt.Fprintf(w, "%-28s %-8s %-9s %-7s %s\n", r.Scenario, status, score, r.Duration.Round(time.Millisecond), stringsJoin(r.Reasons, "; "))
 	}
 	fmt.Fprintf(w, "\n%d/%d scenarios passed\n", passed, total)
+
+	if c := suite.Calibration; c != nil {
+		fmt.Fprintf(w, "calibration: %d ground-truth points, accuracy %.0f%% — ECE %.1f%% @T=26 → ECE %.1f%% @T=%.1f\n",
+			c.Points, c.Accuracy*100, c.DefaultECE*100, c.ECE*100, c.Temperature)
+		if c.Points < 10 {
+			fmt.Fprintf(w, "  (advisory: <10 points — the fitted temperature is not yet trustworthy; the benchmark gate still uses the default T=26)\n")
+		}
+	}
+
 	if passed != total {
 		return fmt.Errorf("benchmark gate: %d scenario(s) failed", total-passed)
 	}

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/graph"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
@@ -82,15 +83,36 @@ func dedup(changes []model.Change) []model.Change {
 	return out
 }
 
+// AnomalyScore returns 1.0 when a growing metric series co-occurs with the
+// change (within delta), else 0. This is the design's anomaly factor: metric
+// movement near a change is weak, non-causal corroboration — it raises the
+// change's relevance without claiming causation (docs/DESIGN.md §8.3).
+func AnomalyScore(observations []model.Observation, ch model.Change, delta time.Duration) float64 {
+	for _, o := range observations {
+		if o.Kind != "metric.series" {
+			continue
+		}
+		if d := o.Timestamp.Sub(ch.Timestamp); d < -delta || d > delta {
+			continue
+		}
+		first, _ := analyze.PayloadFloat(o.Payload, "first")
+		last, _ := analyze.PayloadFloat(o.Payload, "last")
+		if first > 0 && last > first*1.2 {
+			return 1.0
+		}
+	}
+	return 0
+}
+
 // Rank scores changes by relevance to the incident (docs/DESIGN.md §8.3):
 //
 //	relevance = 0.45·temporal + 0.30·graph + 0.15·ownership + 0.10·anomaly
 //
 // temporal: how close the change is to the incident onset (before it);
 // graph: hops between the changed resource and the target in the evidence
-// graph; ownership: direct ancestor in the OWNS chain; anomaly: 0 until
-// metric correlation lands (v0.2+ with Prometheus).
-func Rank(changes []model.Change, g *model.Graph, target model.ResourceRef, onset time.Time, windowSpan time.Duration) []model.Change {
+// graph; ownership: direct ancestor in the OWNS chain; anomaly: metric
+// co-occurrence via anomalyFn (nil = 0).
+func Rank(changes []model.Change, g *model.Graph, target model.ResourceRef, onset time.Time, windowSpan time.Duration, anomalyFn func(model.Change) float64) []model.Change {
 	const (
 		wTemporal = 0.45
 		wGraph    = 0.30
@@ -119,6 +141,10 @@ func Rank(changes []model.Change, g *model.Graph, target model.ResourceRef, onse
 				t = 1
 			}
 		}
+		anom := 0.0
+		if anomalyFn != nil {
+			anom = anomalyFn(*c)
+		}
 		hops := graph.Hops(g, c.Resource, target)
 		gp := 0.0
 		if hops >= 0 {
@@ -128,13 +154,13 @@ func Rank(changes []model.Change, g *model.Graph, target model.ResourceRef, onse
 		if owns(g, c.Resource, target) {
 			own = 1.0
 		}
-		c.Relevance = wTemporal*t + wGraph*gp + wOwn*own + wAnomaly*0
+		c.Relevance = wTemporal*t + wGraph*gp + wOwn*own + wAnomaly*anom
 		// Weighted contributions, so factors sum exactly to relevance.
 		c.Factors = map[string]float64{
 			"temporal":  wTemporal * t,
 			"graph":     wGraph * gp,
 			"ownership": wOwn * own,
-			"anomaly":   0,
+			"anomaly":   wAnomaly * anom,
 		}
 	}
 	sort.SliceStable(changes, func(i, j int) bool {

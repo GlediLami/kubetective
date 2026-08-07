@@ -1,0 +1,12 @@
+name: oom-memory-growth
+description: >-
+  Prometheus-backed memory exhaustion: usage grows 410Mi → 1.10Gi against a
+  1Gi limit, container OOMKilled repeatedly. Metric series corroborate the
+  mechanism (breach + growth evidence).
+ground_truth:
+  root_cause: "Memory exhaustion confirmed by metrics: usage reached the limit"
+  top_hypothesis_category: memory
+  min_score: 0.95
+  expected_finding_analyzers:
+    - oom
+  expected_status: OOMKILLED

@@ -139,6 +139,50 @@ func TestOOMAnalyzerUsesKubeletEvents(t *testing.T) {
 	}
 }
 
+// TestOOMAnalyzerUsesPrometheusMetrics: when a Prometheus collector ran, the
+// memory series corroborate the mechanism — usage peaked at/above the limit
+// and grew within the window.
+func TestOOMAnalyzerUsesPrometheusMetrics(t *testing.T) {
+	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	in := &analyze.AnalysisInput{Observations: []model.Observation{
+		obs("container.spec", res, base, map[string]any{"limits": map[string]string{"memory": "1Gi"}}),
+		obs("container.terminated", res, base.Add(6*time.Minute), map[string]any{"reason": "OOMKilled", "exit_code": int64(137), "restarts": int64(2)}),
+		obs("metric.series", res, base.Add(5*time.Minute), map[string]any{
+			"metric": "container_memory_working_set_bytes", "container": "checkout",
+			"first": 4.10e+08, "last": 1.10e+09, "min": 4.10e+08, "max": 1.10e+09, "count": int64(4), "unit": "bytes",
+		}),
+	}}
+	_, hypotheses, _, err := New().Analyze(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(hypotheses) != 1 {
+		t.Fatalf("hypotheses = %d, want 1", len(hypotheses))
+	}
+	h := hypotheses[0]
+	hasBreach, hasGrowth := false, false
+	for _, line := range h.Score.Lines {
+		if line.EvidenceID == "oom.checkout-7f84c9.metric-breach" {
+			hasBreach = true
+		}
+		if line.EvidenceID == "oom.checkout-7f84c9.metric-growth" {
+			hasGrowth = true
+		}
+	}
+	if !hasBreach {
+		t.Error("missing metric-breach evidence (max ≥ limit)")
+	}
+	if !hasGrowth {
+		t.Error("missing metric-growth evidence (last > first×1.2)")
+	}
+	// Metrics add 35 to the margin: mechanism 20 + temporal 27 + limit 15 +
+	// repro 10 + breach 20 + growth 15 = 107 → saturating high.
+	if h.Score.Score < 0.97 {
+		t.Errorf("score = %.3f, want ≥ 0.97 with metric corroboration", h.Score.Score)
+	}
+}
+
 func TestOOMAnalyzerAfterJSONRoundTrip(t *testing.T) {
 	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
 	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)

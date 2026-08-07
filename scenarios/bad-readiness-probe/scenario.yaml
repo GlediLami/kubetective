@@ -1,0 +1,12 @@
+name: bad-readiness-probe
+description: >-
+  The container runs but the readiness probe returns HTTP 500; kubelet marks
+  it Unhealthy and restarts it. Traffic should be withheld — the probe
+  config/endpoint is the problem, not the process.
+ground_truth:
+  root_cause: "Readiness probe failing (HTTP 500)"
+  top_hypothesis_category: probe
+  min_score: 0.85
+  expected_finding_analyzers:
+    - probe
+  expected_status: UNHEALTHY

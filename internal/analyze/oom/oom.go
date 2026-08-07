@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
+	"github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/score"
 )
@@ -17,6 +18,8 @@ import (
 const (
 	weightTemporal     = 30.0
 	weightMechanism    = 20.0
+	weightMetricBreach = 20.0 // Prometheus: usage reached the limit
+	weightMetricGrowth = 15.0 // Prometheus: usage grew within the window
 	weightLimit        = 15.0
 	weightReproduce    = 10.0
 	weightNodePressure = 15.0 // contradiction when node is under pressure
@@ -90,6 +93,15 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		if o.Kind == "node.condition" && o.Payload["type"] == "MemoryPressure" && o.Payload["status"] == "True" {
 			nodePressure = true
 		}
+	}
+	// Metric evidence: Prometheus memory series per pod (when available).
+	metrics := map[string]*metricEvidence{}
+	for _, o := range in.Observations {
+		if o.Kind != "metric.series" || o.Payload["metric"] != prometheus.MetricMemory {
+			continue
+		}
+		m := parseSeries(o.Payload)
+		metrics[o.Resource.String()] = m
 	}
 
 	var findings []model.Finding
@@ -174,6 +186,31 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		evs = append(evs, eTemporal)
 		terms = append(terms, score.EvidenceTerm{ID: eTemporal.ID, Label: "strong temporal correlation (terminations in window)", Weight: weightTemporal, Strength: 0.9, Polarity: +1})
 
+		// Prometheus corroboration: memory reaching the limit and growth
+		// within the window (only present when a Prometheus collector ran).
+		if m := metrics[key]; m != nil {
+			if g.hasLimit {
+				if limitBytes, ok := analyze.ParseBytes(g.limit); ok && m.max >= float64(limitBytes) {
+					eBreach := model.Evidence{
+						ID:     fmt.Sprintf("oom.%s.metric-breach", res.Name),
+						Claim:  "memory usage reached the limit (Prometheus)",
+						Weight: weightMetricBreach, Strength: 1.0,
+					}
+					evs = append(evs, eBreach)
+					terms = append(terms, score.EvidenceTerm{ID: eBreach.ID, Label: fmt.Sprintf("metrics: memory peaked at %.0f Mi ≥ limit %s", m.max/1048576, g.limit), Weight: weightMetricBreach, Strength: 1.0, Polarity: +1})
+				}
+			}
+			if m.growth {
+				eGrowth := model.Evidence{
+					ID:     fmt.Sprintf("oom.%s.metric-growth", res.Name),
+					Claim:  "memory usage increased within the window",
+					Weight: weightMetricGrowth, Strength: 1.0,
+				}
+				evs = append(evs, eGrowth)
+				terms = append(terms, score.EvidenceTerm{ID: eGrowth.ID, Label: fmt.Sprintf("metrics: memory grew %.0f Mi → %.0f Mi", m.first/1048576, m.last/1048576), Weight: weightMetricGrowth, Strength: 1.0, Polarity: +1})
+			}
+		}
+
 		// Contradiction: node memory pressure shifts suspicion to the node.
 		eNode := model.Evidence{
 			ID:          fmt.Sprintf("oom.%s.nodepressure", res.Name),
@@ -215,6 +252,21 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 func breakdown(terms []score.EvidenceTerm, missing int) *model.ScoreBreakdown {
 	bd := score.Breakdown(model.Hypothesis{}, terms, missing)
 	return &bd
+}
+
+// metricEvidence is the parsed Prometheus memory series summary.
+type metricEvidence struct {
+	first, last, max float64
+	growth           bool // last > first * 1.2 (≥20% growth within the window)
+}
+
+func parseSeries(p map[string]any) *metricEvidence {
+	first, _ := analyze.PayloadFloat(p, "first")
+	last, _ := analyze.PayloadFloat(p, "last")
+	max, _ := analyze.PayloadFloat(p, "max")
+	m := &metricEvidence{first: first, last: last, max: max}
+	m.growth = first > 0 && last > first*1.2
+	return m
 }
 
 func (a *Analyzer) NeedsEvidence(_ model.Hypothesis) []analyze.EvidenceRequest {

@@ -15,11 +15,14 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/nodepressure"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/probe"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
+	promcollect "github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
 	"github.com/kubedoctor/kubedoctor/internal/engine"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/record"
@@ -81,7 +84,7 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	return root
 }
 
-// newEngine wires the v0.1 analyzer set with the given collectors.
+// newEngine wires the v0.2 analyzer set with the given collectors.
 func newEngine(collectors ...collect.Collector) *engine.Engine {
 	reg := collect.NewRegistry()
 	for _, c := range collectors {
@@ -92,24 +95,27 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(crashloop.New())
 	ar.Register(imagepull.New())
 	ar.Register(scheduling.New())
+	ar.Register(nodepressure.New())
+	ar.Register(probe.New())
 	return engine.New(reg, ar)
 }
 
 func newInvestigateCmd() *cobra.Command {
 	var (
-		namespace  string
-		since      time.Duration
-		noLogs     bool
-		format     string
-		kubeconfig string
-		context    string
+		namespace     string
+		since         time.Duration
+		noLogs        bool
+		format        string
+		kubeconfig    string
+		context       string
+		prometheusURL string
 	)
 	cmd := &cobra.Command{
 		Use:   "investigate <resource>",
 		Short: "Investigate a resource or incident",
 		Example: `  kubectl investigate pod/checkout-7f84c9
   kubectl investigate deployment/checkout --since=2h
-  kubectl investigate --namespace production --since=30m`,
+  kubectl investigate --namespace production --since=30m --prometheus-url=http://localhost:9090`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, err := parseTarget(args, namespace)
@@ -120,7 +126,17 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("connect to cluster: %w", err)
 			}
-			eng := newEngine(k8scollect.New(client))
+			// Optional telemetry: k8s collector first (staged collection),
+			// Prometheus second if configured (flag or env).
+			collectors := []collect.Collector{k8scollect.New(client)}
+			url := prometheusURL
+			if url == "" {
+				url = os.Getenv("KUBEDOCTOR_PROMETHEUS")
+			}
+			if url != "" {
+				collectors = append(collectors, promcollect.New(url))
+			}
+			eng := newEngine(collectors...)
 			req := &api.InvestigationRequest{
 				Target: target,
 				Window: api.Since(since),
@@ -148,6 +164,7 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text | json")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
+	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBEDOCTOR_PROMETHEUS env) for metric evidence")
 	return cmd
 }
 
@@ -194,13 +211,13 @@ Exit code 1 if any scenario fails — this is the analyzer contribution gate.`,
 			if len(args) == 1 {
 				scenariosDir = args[0]
 			}
-			results, err := benchmark.RunSuite(cmd.Context(), scenariosDir, func(cs ...collect.Collector) api.Investigator {
+			suite, err := benchmark.RunSuite(cmd.Context(), scenariosDir, func(cs ...collect.Collector) api.Investigator {
 				return newEngine(cs...)
 			})
 			if err != nil {
 				return err
 			}
-			return renderBenchmark(results)
+			return renderBenchmark(suite)
 		},
 	}
 	cmd.Flags().StringVar(&scenariosDir, "scenarios", "scenarios", "directory containing benchmark scenarios")

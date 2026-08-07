@@ -1,0 +1,13 @@
+name: node-pressure
+description: >-
+  The node is under memory + disk pressure (kubelet evicting pods); the pod's
+  OOMKilled is a symptom of node-level pressure, which must outrank the
+  per-pod memory hypothesis.
+ground_truth:
+  root_cause: "Node under memory/disk pressure"
+  top_hypothesis_category: node
+  min_score: 0.85
+  expected_finding_analyzers:
+    - nodepressure
+    - oom
+  expected_status: NODEPRESSURE
