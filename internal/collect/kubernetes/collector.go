@@ -26,12 +26,15 @@ const namespacePodCap = 500
 // Collector normalizes Kubernetes API state into Observations.
 type Collector struct {
 	client kubernetes.Interface
+	// svcCache caches a namespace's services within one Collect call (the
+	// engine runs collectors sequentially, so this is safe).
+	svcCache map[string][]corev1.Service
 }
 
 var _ collect.Collector = (*Collector)(nil)
 
 func New(client kubernetes.Interface) *Collector {
-	return &Collector{client: client}
+	return &Collector{client: client, svcCache: map[string][]corev1.Service{}}
 }
 
 func (c *Collector) ID() string { return "kubernetes" }
@@ -100,6 +103,11 @@ func (c *Collector) collectPod(ctx context.Context, scope *collect.ScopePlan, ns
 	// StatefulSet / DaemonSet) so a pod-target investigation can surface
 	// "the owning workload changed" (docs/DESIGN.md §8.1 Stage B).
 	obs = append(obs, c.controllerStateObservation(ctx, pod, res, refs[0])...)
+	// Storage + routing context: PVCs backing the pod's volumes, services
+	// selecting the pod, and the HPA that manages it (v0.3 analyzers).
+	obs = append(obs, c.pvcObservations(ctx, pod, res, refs[0])...)
+	obs = append(obs, c.serviceObservations(ctx, pod, res, refs[0])...)
+	obs = append(obs, c.hpaObservations(ctx, pod, res, refs[0])...)
 
 	// Container specs + states.
 	for i := range pod.Spec.Containers {
@@ -241,6 +249,179 @@ func (c *Collector) ownerChainObservations(ctx context.Context, pod *corev1.Pod,
 	return obs
 }
 
+// pvcObservations fetches the PersistentVolumeClaims backing the pod's
+// volumes and normalizes their binding state.
+func (c *Collector) pvcObservations(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
+	var obs []model.Observation
+	for _, vol := range pod.Spec.Volumes {
+		if vol.PersistentVolumeClaim == nil {
+			continue
+		}
+		name := vol.PersistentVolumeClaim.ClaimName
+		pvc, err := c.client.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			continue
+		}
+		pvcRes := model.ResourceRef{Kind: "pvc", Namespace: pod.Namespace, Name: name}
+		obs = append(obs, collect.NewObservation(
+			"pvc.state",
+			ref,
+			pvc.CreationTimestamp.Time,
+			pvcRes,
+			map[string]any{
+				"phase":       string(pvc.Status.Phase),
+				"requested":   pvc.Spec.Resources.Requests.Storage().String(),
+				"capacity":    pvc.Status.Capacity.Storage().String(),
+				"volume_name": pvc.Spec.VolumeName,
+				"pod":         pod.Name,
+			},
+			1.0,
+		))
+		// Binding failures arrive as events on the PVC itself.
+		if evs, err := c.eventsFor(ctx, pod.Namespace, "PersistentVolumeClaim", name, api.Window{}); err == nil {
+			obs = append(obs, evs...)
+		}
+	}
+	return obs
+}
+
+// serviceObservations finds Services whose selector matches the pod and
+// normalizes their endpoints state (the 503 / selector-mismatch context).
+func (c *Collector) serviceObservations(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
+	services, err := c.servicesInNamespace(ctx, pod.Namespace)
+	if err != nil {
+		return nil
+	}
+	var obs []model.Observation
+	for i := range services {
+		svc := &services[i]
+		if len(svc.Spec.Selector) == 0 {
+			continue
+		}
+		if !labelsMatch(svc.Spec.Selector, pod.Labels) {
+			continue
+		}
+		ready, total := c.endpointsCount(ctx, svc)
+		obs = append(obs, collect.NewObservation(
+			"service.state",
+			ref,
+			svc.CreationTimestamp.Time,
+			model.ResourceRef{Kind: "service", Namespace: pod.Namespace, Name: svc.Name},
+			map[string]any{
+				"selector":        svc.Spec.Selector,
+				"matching_pods":   1, // the pod we are investigating matches
+				"ready_endpoints": ready,
+				"total_endpoints": total,
+				"ports":           len(svc.Spec.Ports),
+			},
+			1.0,
+		))
+	}
+	return obs
+}
+
+// hpaObservations finds the HorizontalPodAutoscaler managing the pod's
+// workload (via owner chain) and normalizes its scaling state.
+func (c *Collector) hpaObservations(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
+	controller := c.topControllerName(pod)
+	if controller == "" {
+		return nil
+	}
+	hpas, err := c.client.AutoscalingV2().HorizontalPodAutoscalers(pod.Namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil
+	}
+	var obs []model.Observation
+	for i := range hpas.Items {
+		hpa := &hpas.Items[i]
+		if hpa.Spec.ScaleTargetRef.Name != controller {
+			continue
+		}
+		current := int64(hpa.Status.CurrentReplicas)
+		desired := int64(hpa.Status.DesiredReplicas)
+		minReplicas := int64(1)
+		if hpa.Spec.MinReplicas != nil {
+			minReplicas = int64(*hpa.Spec.MinReplicas)
+		}
+		obs = append(obs, collect.NewObservation(
+			"hpa.state",
+			ref,
+			hpa.CreationTimestamp.Time,
+			model.ResourceRef{Kind: "hpa", Namespace: pod.Namespace, Name: hpa.Name},
+			map[string]any{
+				"min_replicas":     minReplicas,
+				"max_replicas":     int64(hpa.Spec.MaxReplicas),
+				"current_replicas": current,
+				"desired_replicas": desired,
+				"target":           hpa.Spec.Metrics,
+				"workload":         controller,
+				"at_max":           current >= int64(hpa.Spec.MaxReplicas),
+			},
+			1.0,
+		))
+	}
+	return obs
+}
+
+// servicesInNamespace lists a namespace's services, cached per Collect call.
+func (c *Collector) servicesInNamespace(ctx context.Context, ns string) ([]corev1.Service, error) {
+	if cached, ok := c.svcCache[ns]; ok {
+		return cached, nil
+	}
+	list, err := c.client.CoreV1().Services(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+	c.svcCache[ns] = list.Items
+	return list.Items, nil
+}
+
+// endpointsCount reads the Endpoints object matching a Service.
+func (c *Collector) endpointsCount(ctx context.Context, svc *corev1.Service) (ready, total int) {
+	ep, err := c.client.CoreV1().Endpoints(svc.Namespace).Get(ctx, svc.Name, metav1.GetOptions{})
+	if err != nil {
+		return 0, 0
+	}
+	for _, subset := range ep.Subsets {
+		ready += len(subset.Addresses)
+		total += len(subset.Addresses) + len(subset.NotReadyAddresses)
+	}
+	return ready, total
+}
+
+// topControllerName walks the owner chain to the top-level controller name
+// (Deployment/StatefulSet/DaemonSet), or "" if none.
+func (c *Collector) topControllerName(pod *corev1.Pod) string {
+	if len(pod.OwnerReferences) == 0 {
+		return ""
+	}
+	owner := pod.OwnerReferences[0]
+	for hops := 0; hops < 3; hops++ {
+		switch owner.Kind {
+		case "ReplicaSet":
+			rs, err := c.client.AppsV1().ReplicaSets(pod.Namespace).Get(context.Background(), owner.Name, metav1.GetOptions{})
+			if err != nil || len(rs.OwnerReferences) == 0 {
+				return ""
+			}
+			owner = rs.OwnerReferences[0]
+		case "Deployment", "StatefulSet", "DaemonSet":
+			return owner.Name
+		default:
+			return ""
+		}
+	}
+	return ""
+}
+
+func labelsMatch(selector, labels map[string]string) bool {
+	for k, v := range selector {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
 // controllerStateObservation walks the owner chain to the top-level
 // controller and emits its state observation (deployment.state today).
 func (c *Collector) controllerStateObservation(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
@@ -306,10 +487,12 @@ func (c *Collector) eventsFor(ctx context.Context, ns, kind, name string, w api.
 	return obs, nil
 }
 
-// logSnippets tails container logs (capped, on demand). Lines are recorded as
-// opaque data — analyzers and the LLM never treat them as instructions.
+// logSnippets tails container logs (capped). Collected when the scope asks
+// for logs OR an analyzer requested them via the adaptive loop
+// (ScopePlan.EvidenceRequests with QueryHint "logs").
 func (c *Collector) logSnippets(ctx context.Context, scope *collect.ScopePlan, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
-	if !scope.Logs {
+	logsWanted := scope.Logs || scope.WantsHint("logs")
+	if !logsWanted {
 		return nil
 	}
 	tail := scope.MaxLogLines
@@ -342,7 +525,7 @@ func (c *Collector) logSnippets(ctx context.Context, scope *collect.ScopePlan, p
 			model.SourceRef{System: "k8s", Query: fmt.Sprintf("GET /api/v1/namespaces/%s/pods/%s/log?container=%s&tailLines=%d", pod.Namespace, pod.Name, ctr.Name, tail)},
 			ts,
 			res,
-			map[string]any{"container": ctr.Name, "lines": split, "truncated": false},
+			map[string]any{"container": ctr.Name, "lines": split, "line_count": len(split), "truncated": false},
 			1.0,
 		))
 	}

@@ -14,13 +14,26 @@ import (
 // resources plus collection options for this investigation. Prior holds the
 // observations earlier collectors produced (staged collection, docs/DESIGN.md
 // §8.2) — e.g. the Prometheus collector derives pod targets from the
-// Kubernetes collector's pod.state observations.
+// Kubernetes collector's pod.state observations. EvidenceRequests carries the
+// adaptive loop's targeted asks (docs/DESIGN.md §8.4).
 type ScopePlan struct {
-	Targets     []model.ResourceRef
-	Window      api.Window
-	Logs        bool
-	MaxLogLines int
-	Prior       []model.Observation
+	Targets          []model.ResourceRef
+	Window           api.Window
+	Logs             bool
+	MaxLogLines      int
+	Prior            []model.Observation
+	EvidenceRequests []model.EvidenceRequest
+}
+
+// WantsHint reports whether an analyzer requested evidence with the given
+// query hint (e.g. "logs") — collectors honor what they understand.
+func (s *ScopePlan) WantsHint(hint string) bool {
+	for _, r := range s.EvidenceRequests {
+		if r.QueryHint == hint {
+			return true
+		}
+	}
+	return false
 }
 
 // Collector normalizes one data source into Observations. A collector failure

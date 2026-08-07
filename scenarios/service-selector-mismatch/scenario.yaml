@@ -1,0 +1,11 @@
+name: service-selector-mismatch
+description: >-
+  Two healthy checkout pods run, but the service has zero endpoints: its
+  selector does not match the pods' labels. Every request 503s.
+ground_truth:
+  root_cause: "Service selector does not match the running pods"
+  top_hypothesis_category: service
+  min_score: 0.85
+  expected_finding_analyzers:
+    - service
+  expected_status: NOENDPOINTS

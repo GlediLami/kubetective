@@ -300,6 +300,133 @@ func TestInvestigatePodTargetHealthyStaysSilent(t *testing.T) {
 	}
 }
 
+// adaptiveCollector wraps the kubernetes collector, counts Collect calls, and
+// simulates log snippets arriving on the adaptive round (the fake clientset
+// cannot serve GetLogs content).
+type adaptiveCollector struct {
+	inner *k8scollect.Collector
+	calls int
+}
+
+func (c *adaptiveCollector) ID() string { return c.inner.ID() }
+
+func (c *adaptiveCollector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]model.Observation, []model.SourceRef, error) {
+	c.calls++
+	obs, refs, err := c.inner.Collect(ctx, scope)
+	if c.calls >= 2 && scope.WantsHint("logs") {
+		obs = append(obs, collect.NewObservation(
+			"log.snippet",
+			model.SourceRef{System: "k8s", Query: "GET logs (simulated)"},
+			time.Now(),
+			model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "api-abc"},
+			map[string]any{"container": "api", "lines": []string{"panic: boom"}, "line_count": 3, "truncated": false},
+			1.0,
+		))
+	}
+	return obs, refs, err
+}
+
+// TestAdaptiveCollectionLoop: a crash loop with unknown exit cause requests
+// logs (NeedsEvidence); the engine runs a second, targeted collection round;
+// the arriving logs become evidence and satisfy the request.
+func TestAdaptiveCollectionLoop(t *testing.T) {
+	ns := "prod"
+	start := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "api-abc",
+			Namespace:         ns,
+			UID:               types.UID("pod-uid"),
+			CreationTimestamp: metav1.Time{Time: start},
+		},
+		Spec: corev1.PodSpec{
+			NodeName: "node-a",
+			Containers: []corev1.Container{{
+				Name:  "api",
+				Image: "registry.example/api:v1",
+				Resources: corev1.ResourceRequirements{
+					Limits: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("512Mi")},
+				},
+			}},
+		},
+		Status: corev1.PodStatus{
+			Phase:     corev1.PodRunning,
+			StartTime: &metav1.Time{Time: start},
+			ContainerStatuses: []corev1.ContainerStatus{{
+				Name:         "api",
+				RestartCount: 3,
+				State:        corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+			}},
+		},
+	}
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{Name: "node-a", CreationTimestamp: metav1.Time{Time: start.Add(-2 * time.Hour)}},
+		Status: corev1.NodeStatus{
+			Capacity: corev1.ResourceList{corev1.ResourceMemory: resource.MustParse("16Gi")},
+			Conditions: []corev1.NodeCondition{{
+				Type:               corev1.NodeReady,
+				Status:             corev1.ConditionTrue,
+				LastTransitionTime: metav1.Time{Time: start.Add(-2 * time.Hour)},
+			}},
+		},
+	}
+	client := fake.NewSimpleClientset(pod, node)
+	wrapped := &adaptiveCollector{inner: k8scollect.New(client)}
+
+	reg := collect.NewRegistry()
+	reg.Register(wrapped)
+	ar := analyze.NewRegistry()
+	ar.Register(crashloop.New())
+	eng := New(reg, ar)
+
+	res, err := eng.Investigate(context.Background(), &api.InvestigationRequest{
+		Target: model.ResourceRef{Kind: "pod", Namespace: ns, Name: "api-abc"},
+		Window: api.Window{Start: start.Add(-30 * time.Minute), End: start.Add(30 * time.Minute)},
+		Scope:  api.ScopeOptions{Logs: false}, // logs must arrive via the adaptive ask
+	})
+	if err != nil {
+		t.Fatalf("Investigate: %v", err)
+	}
+
+	if wrapped.calls < 2 {
+		t.Fatalf("collector calls = %d, want ≥ 2 (initial + adaptive round)", wrapped.calls)
+	}
+	// The requested evidence arrived.
+	foundLog := false
+	for _, o := range res.Observations {
+		if o.Kind == "log.snippet" {
+			foundLog = true
+		}
+	}
+	if !foundLog {
+		t.Fatal("adaptive round did not deliver the requested log evidence")
+	}
+	// The crashloop hypothesis consumed it: logs evidence present, the
+	// exit-logs missing entry satisfied.
+	if len(res.Hypotheses) != 1 {
+		t.Fatalf("hypotheses = %d, want 1", len(res.Hypotheses))
+	}
+	h := res.Hypotheses[0]
+	hasLogsEvidence := false
+	for _, e := range h.Evidence {
+		if e == "crashloop.api-abc.logs" {
+			hasLogsEvidence = true
+		}
+	}
+	if !hasLogsEvidence {
+		t.Errorf("crashloop hypothesis missing logs evidence: %v", h.Evidence)
+	}
+	for _, m := range h.Missing {
+		if m == "crashloop.api-abc.exit-logs" {
+			t.Error("exit-logs missing entry must be satisfied once logs arrived")
+		}
+	}
+	// And the score reflects the extra evidence (waiting 30 + restarts 10 + logs 10).
+	if h.Score == nil || h.Score.Score < 0.85 {
+		t.Errorf("score = %v, want ≥ 0.85 with logs evidence", h.Score)
+	}
+}
+
 func topHypothesisForTest(res *api.InvestigationResult) *model.Hypothesis {
 	var top *model.Hypothesis
 	for i := range res.Hypotheses {

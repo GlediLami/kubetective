@@ -268,3 +268,15 @@ type IncidentResultRecord struct {
 	Changes    []Change      `json:"changes,omitempty"`
 	Gaps       []EvidenceGap `json:"gaps,omitempty"`
 }
+
+// EvidenceRequest describes evidence an analyzer would need to strengthen or
+// refute a live hypothesis — this drives the adaptive collection loop
+// (docs/DESIGN.md §8.4). Lives in model so the collect boundary can carry it
+// without an analyze dependency.
+type EvidenceRequest struct {
+	HypothesisID string
+	Description  string
+	Collector    string // e.g. "kubernetes", "prometheus"
+	QueryHint    string // e.g. "logs" — collector-specific
+	Cost         int    // rough relative cost, used by the engine's budget
+}

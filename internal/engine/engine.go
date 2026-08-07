@@ -1,6 +1,8 @@
 // Package engine orchestrates the investigation pipeline:
 //
-//	scope → collect → build (timeline + graph) → analyze → score → record/report
+//	scope → collect → build (timeline + graph + changes) → analyze → score
+//	→ adaptive rounds (NeedsEvidence → collect more → re-analyze)
+//	→ record/report
 //
 // It is the only component that knows the pipeline order; collectors and
 // analyzers know nothing about each other (docs/DESIGN.md §6, §8).
@@ -16,6 +18,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/change"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	"github.com/kubedoctor/kubedoctor/internal/graph"
+	"github.com/kubedoctor/kubedoctor/internal/hypothesis"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/score"
 	"github.com/kubedoctor/kubedoctor/internal/timeline"
@@ -27,7 +30,15 @@ import (
 var ErrNoCollectors = errors.New("engine: no collectors registered")
 
 // Version is stamped at build time (-ldflags "-X github.com/kubedoctor/kubedoctor/internal/engine.Version=...").
-var Version = "v0.1.0-dev"
+var Version = "v0.3.0-dev"
+
+// Adaptive collection bounds (docs/DESIGN.md §8.4): at most two targeted
+// rounds, ≤5 requests, total cost ≤ requestBudget.
+const (
+	maxAdaptiveRounds = 2
+	maxRequests       = 5
+	requestBudget     = 6
+)
 
 // Engine implements api.Investigator.
 type Engine struct {
@@ -48,84 +59,48 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 		return nil, ErrNoCollectors
 	}
 
-	var gaps []model.EvidenceGap
-
-	// Stage 1 — scope resolution: bounded worklist of related resources.
-	// v0.1: the target itself; owner-chain expansion happens inside the
-	// Kubernetes collector.
-	targets := []model.ResourceRef{req.Target}
-
-	// Stage 2 — collection: collectors normalize raw data into Observations.
-	// A collector failure is a gap, never a fatal error.
+	// Stage 1 — scope: the target itself; owner-chain expansion happens
+	// inside the Kubernetes collector.
 	scopePlan := &collect.ScopePlan{
-		Targets:     targets,
+		Targets:     []model.ResourceRef{req.Target},
 		Window:      req.Window,
 		Logs:        req.Scope.Logs,
 		MaxLogLines: req.Scope.MaxLogLines,
 	}
-	var observations []model.Observation
-	var sources []string
-	for _, c := range e.collectors.All() {
-		// Staged collection: later collectors (e.g. Prometheus) derive their
-		// targets from earlier collectors' output (docs/DESIGN.md §8.2).
-		scopePlan.Prior = observations
-		obs, refs, err := c.Collect(ctx, scopePlan)
-		if err != nil {
-			gaps = append(gaps, model.EvidenceGap{
-				Description: fmt.Sprintf("collector %s failed: %v", c.ID(), err),
-				Category:    "collector-down",
-			})
-			continue
-		}
-		observations = append(observations, obs...)
-		for _, r := range refs {
-			sources = append(sources, r.System)
-		}
-	}
-	// Dedup by content-hashed ID (identical facts from overlapping queries).
+
+	// Stage 2 — initial collection.
+	observations, gaps, sources := e.collectAll(ctx, scopePlan)
 	observations = dedup(observations)
 
-	// Stage 3 — build: timeline (merge/dedup/anchor) + "what changed" ranking
-	// + the bounded evidence graph (docs/DESIGN.md §7.3, §8.3).
-	events := timeline.Build(observations)
-	onsetTs := time.Time{}
-	if len(events) > 0 {
-		if ts, ok := timeline.Anchor(events); ok {
-			onsetTs = ts
+	// Stage 3–5 — build + analyze + score.
+	events, changes, g := e.buildStage(observations, req)
+	findings, hypotheses, evidence, agaps := e.analyzeAll(ctx, observations, g, changes)
+	gaps = append(gaps, agaps...)
+	hypotheses = hypothesis.Merge(hypotheses)
+
+	// Stage 6 — adaptive rounds: analyzers ask for targeted evidence
+	// (NeedsEvidence), collectors fetch it, the pipeline re-runs. Bounded.
+	for round := 1; round <= maxAdaptiveRounds; round++ {
+		requests := e.pendingRequests(hypotheses)
+		if len(requests) == 0 {
+			break
 		}
+		scopePlan.EvidenceRequests = requests
+		newObs, ngaps, _ := e.collectAll(ctx, scopePlan)
+		gaps = append(gaps, ngaps...)
+		merged := dedup(append(observations, newObs...))
+		if len(merged) == len(observations) {
+			break // nothing new arrived; re-requesting would spin
+		}
+		observations = merged
+		events, changes, g = e.buildStage(observations, req)
+		findings, hypotheses, evidence, agaps = e.analyzeAll(ctx, observations, g, changes)
+		gaps = append(gaps, agaps...)
+		hypotheses = hypothesis.Merge(hypotheses)
 	}
 
-	// Change detection needs the structural graph (OWNS/RUNS_ON) for ranking.
-	structural := graph.Build(observations, nil, nil, graph.Options{MaxNodes: scopeMaxNodes(req)})
-	changes := change.Rank(change.Detect(observations, req.Window.Start), structural, req.Target, onsetTs, windowSpan(req),
-		func(ch model.Change) float64 { return change.AnomalyScore(observations, ch, 5*time.Minute) })
-	g := graph.Build(observations, changes, anchorEvent(events), graph.Options{MaxNodes: scopeMaxNodes(req)})
-
-	// Stage 4 — analysis: deterministic analyzers emit findings, hypotheses,
-	// and evidence over the normalized observations.
-	var findings []model.Finding
-	var hypotheses []model.Hypothesis
-	var evidence []model.Evidence
-	for _, a := range e.analyzers.All() {
-		fs, hs, evs, err := a.Analyze(ctx, &analyze.AnalysisInput{
-			Observations: observations,
-			Graph:        g,
-			Changes:      changes,
-		})
-		if err != nil {
-			gaps = append(gaps, model.EvidenceGap{
-				Description: fmt.Sprintf("analyzer %s failed: %v", a.ID(), err),
-				Category:    "analyzer-error",
-			})
-			continue
-		}
-		findings = append(findings, fs...)
-		hypotheses = append(hypotheses, hs...)
-		evidence = append(evidence, evs...)
-	}
-
-	// Stage 5 — outcome: status/severity from findings, confidence from the
-	// top hypothesis. (Scoring happens inside analyzers via internal/score.)
+	// Outcome summary: status/severity from findings, confidence from the
+	// top hypothesis.
 	summary := &model.IncidentSummary{
 		ID:       fmt.Sprintf("incident-%d", started.Unix()),
 		Target:   req.Target,
@@ -155,6 +130,102 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	return res, nil
 }
 
+// collectAll runs every collector with the current scope plan (staged:
+// Prior carries earlier collectors' output; EvidenceRequests carries the
+// adaptive asks). Collector failures become gaps, never fatal errors.
+func (e *Engine) collectAll(ctx context.Context, scopePlan *collect.ScopePlan) ([]model.Observation, []model.EvidenceGap, []string) {
+	var observations []model.Observation
+	var gaps []model.EvidenceGap
+	var sources []string
+	for _, c := range e.collectors.All() {
+		scopePlan.Prior = observations
+		obs, refs, err := c.Collect(ctx, scopePlan)
+		if err != nil {
+			gaps = append(gaps, model.EvidenceGap{
+				Description: fmt.Sprintf("collector %s failed: %v", c.ID(), err),
+				Category:    "collector-down",
+			})
+			continue
+		}
+		observations = append(observations, obs...)
+		for _, r := range refs {
+			sources = append(sources, r.System)
+		}
+	}
+	return observations, gaps, sources
+}
+
+// buildStage builds the timeline, "what changed" ranking, and evidence graph
+// from the current observation set.
+func (e *Engine) buildStage(observations []model.Observation, req *api.InvestigationRequest) ([]model.TimelineEvent, []model.Change, *model.Graph) {
+	events := timeline.Build(observations)
+	onsetTs := time.Time{}
+	if len(events) > 0 {
+		if ts, ok := timeline.Anchor(events); ok {
+			onsetTs = ts
+		}
+	}
+	// Change detection needs the structural graph (OWNS/RUNS_ON) for ranking.
+	structural := graph.Build(observations, nil, nil, graph.Options{MaxNodes: scopeMaxNodes(req)})
+	changes := change.Rank(change.Detect(observations, req.Window.Start), structural, req.Target, onsetTs, windowSpan(req),
+		func(ch model.Change) float64 { return change.AnomalyScore(observations, ch, 5*time.Minute) })
+	g := graph.Build(observations, changes, anchorEvent(events), graph.Options{MaxNodes: scopeMaxNodes(req)})
+	return events, changes, g
+}
+
+// analyzeAll runs every analyzer over the current observations.
+func (e *Engine) analyzeAll(ctx context.Context, observations []model.Observation, g *model.Graph, changes []model.Change) ([]model.Finding, []model.Hypothesis, []model.Evidence, []model.EvidenceGap) {
+	var findings []model.Finding
+	var hypotheses []model.Hypothesis
+	var evidence []model.Evidence
+	var gaps []model.EvidenceGap
+	for _, a := range e.analyzers.All() {
+		fs, hs, evs, err := a.Analyze(ctx, &analyze.AnalysisInput{
+			Observations: observations,
+			Graph:        g,
+			Changes:      changes,
+		})
+		if err != nil {
+			gaps = append(gaps, model.EvidenceGap{
+				Description: fmt.Sprintf("analyzer %s failed: %v", a.ID(), err),
+				Category:    "analyzer-error",
+			})
+			continue
+		}
+		findings = append(findings, fs...)
+		hypotheses = append(hypotheses, hs...)
+		evidence = append(evidence, evs...)
+	}
+	return findings, hypotheses, evidence, gaps
+}
+
+// pendingRequests collects NeedsEvidence asks from all analyzers for the
+// live hypotheses, deduplicated and capped by the request budget.
+func (e *Engine) pendingRequests(hypotheses []model.Hypothesis) []model.EvidenceRequest {
+	var out []model.EvidenceRequest
+	seen := map[string]bool{}
+	cost, count := 0, 0
+	for _, a := range e.analyzers.All() {
+		for i := range hypotheses {
+			h := &hypotheses[i]
+			if h.Status != model.StatusLikely && h.Status != model.StatusCandidate {
+				continue
+			}
+			for _, r := range a.NeedsEvidence(*h) {
+				key := h.ID + "|" + r.QueryHint
+				if seen[key] || cost+r.Cost > requestBudget || count >= maxRequests {
+					continue
+				}
+				seen[key] = true
+				cost += r.Cost
+				count++
+				out = append(out, r)
+			}
+		}
+	}
+	return out
+}
+
 // dedup keeps the first observation per content-hashed ID.
 func dedup(obs []model.Observation) []model.Observation {
 	seen := make(map[string]bool, len(obs))
@@ -170,16 +241,18 @@ func dedup(obs []model.Observation) []model.Observation {
 }
 
 // statusFromFindings derives the incident status card from analyzer findings.
-// Precedence: node pressure > OOM > image pull > crash loop > pending > probe
-// (the more specific/root-cause finding wins the card).
+// Precedence: node pressure > OOM > PVC > image pull > crash loop > pending >
+// probe > service (the more specific/root-cause finding wins the card).
 func statusFromFindings(fs []model.Finding) string {
 	rank := map[string]int{
-		"nodepressure": 6,
-		"oom":          5,
-		"imagepull":    4,
-		"crashloop":    3,
-		"scheduling":   2,
-		"probe":        1,
+		"nodepressure": 8,
+		"oom":          7,
+		"pvc":          6,
+		"imagepull":    5,
+		"crashloop":    4,
+		"scheduling":   3,
+		"probe":        2,
+		"service":      1,
 	}
 	best, bestRank := "INVESTIGATED", 0
 	for _, f := range fs {
@@ -193,6 +266,8 @@ func statusFromFindings(fs []model.Finding) string {
 			best = "NODEPRESSURE"
 		case "oom":
 			best = "OOMKILLED"
+		case "pvc":
+			best = "PVCUNBOUND"
 		case "imagepull":
 			best = "IMAGEPULLBACKOFF"
 		case "crashloop":
@@ -201,6 +276,8 @@ func statusFromFindings(fs []model.Finding) string {
 			best = "PENDING"
 		case "probe":
 			best = "UNHEALTHY"
+		case "service":
+			best = "NOENDPOINTS"
 		}
 	}
 	return best

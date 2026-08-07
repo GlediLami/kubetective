@@ -18,6 +18,7 @@ const (
 	weightWaiting  = 30.0
 	weightExitCode = 15.0
 	weightRestarts = 10.0
+	weightLogs     = 10.0 // container logs captured (adaptive collection)
 	weightOOM      = 20.0 // contradiction: OOMKilled is the more specific explanation
 )
 
@@ -77,6 +78,16 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 	for _, o := range in.Observations {
 		if o.Kind == "container.terminated" && o.Payload["reason"] == "OOMKilled" {
 			oomOnResource[o.Resource.String()] = true
+		}
+	}
+	// Log snippets (adaptive collection): captured logs corroborate the crash
+	// and are kept for human inspection.
+	logLines := map[string]int{}
+	for _, o := range in.Observations {
+		if o.Kind == "log.snippet" {
+			if n, ok := analyze.PayloadInt64(o.Payload, "line_count"); ok {
+				logLines[o.Resource.String()] = int(n)
+			}
 		}
 	}
 
@@ -151,6 +162,15 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			evs = append(evs, eOOM)
 			terms = append(terms, score.EvidenceTerm{ID: eOOM.ID, Label: "contradicting: OOMKilled present (more specific explanation)", Weight: weightOOM, Strength: 1.0, Polarity: -1})
 		}
+		if n := logLines[key]; n > 0 {
+			eLogs := model.Evidence{
+				ID:     fmt.Sprintf("crashloop.%s.logs", res.Name),
+				Claim:  "container logs captured",
+				Weight: weightLogs, Strength: 1.0,
+			}
+			evs = append(evs, eLogs)
+			terms = append(terms, score.EvidenceTerm{ID: eLogs.ID, Label: fmt.Sprintf("container logs captured (%d lines)", n), Weight: weightLogs, Strength: 1.0, Polarity: +1})
+		}
 
 		h := model.Hypothesis{
 			ID:       fmt.Sprintf("crashloop.%s", res.Name),
@@ -161,6 +181,11 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		}
 		for _, e := range evs {
 			h.Evidence = append(h.Evidence, e.ID)
+		}
+		if len(codes) == 0 && logLines[key] == 0 {
+			// Exit cause unknown and no logs captured yet → the adaptive loop
+			// will request them.
+			h.Missing = append(h.Missing, fmt.Sprintf("crashloop.%s.exit-logs", res.Name))
 		}
 		hypotheses = append(hypotheses, h)
 		evidence = append(evidence, evs...)
@@ -192,7 +217,23 @@ func lastTs(ts []model.Observation) time.Time {
 	return t
 }
 
-func (a *Analyzer) NeedsEvidence(_ model.Hypothesis) []analyze.EvidenceRequest { return nil }
+func (a *Analyzer) NeedsEvidence(h model.Hypothesis) []analyze.EvidenceRequest {
+	// Exit cause unknown → container logs (tail) may reveal it; the adaptive
+	// loop fetches them in a second collection round (docs/DESIGN.md §8.4).
+	var out []analyze.EvidenceRequest
+	for _, m := range h.Missing {
+		if strings.HasSuffix(m, ".exit-logs") {
+			out = append(out, analyze.EvidenceRequest{
+				HypothesisID: h.ID,
+				Description:  "container logs to find the crash exit cause",
+				Collector:    "kubernetes",
+				QueryHint:    "logs",
+				Cost:         2,
+			})
+		}
+	}
+	return out
+}
 
 func (a *Analyzer) Explain(f model.Finding) string {
 	return fmt.Sprintf("%s: %s", f.Title, strings.ToLower(f.Description))

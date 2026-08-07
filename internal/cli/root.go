@@ -14,11 +14,14 @@ import (
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/hpa"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/nodepressure"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/probe"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/pvc"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/service"
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
@@ -97,6 +100,9 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(scheduling.New())
 	ar.Register(nodepressure.New())
 	ar.Register(probe.New())
+	ar.Register(pvc.New())
+	ar.Register(service.New())
+	ar.Register(hpa.New())
 	return engine.New(reg, ar)
 }
 

@@ -1,0 +1,13 @@
+name: hpa-at-max
+description: >-
+  All five replicas crash-loop; the HPA is pinned at maxReplicas so scale-out
+  cannot compensate. The crash loop is the root cause; the HPA ceiling is the
+  amplifying context (finding present, not the top hypothesis).
+ground_truth:
+  root_cause: "Application crash loop at HPA capacity ceiling"
+  top_hypothesis_category: crashloop
+  min_score: 0.85
+  expected_finding_analyzers:
+    - crashloop
+    - hpa
+  expected_status: CRASHLOOPBACKOFF

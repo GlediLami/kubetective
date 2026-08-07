@@ -1,0 +1,13 @@
+name: pvc-unschedulable
+description: >-
+  The pod stays Pending because its 100Gi claim cannot bind: no PV available
+  and no storage class. The PVC root cause must outrank the generic
+  scheduling hypothesis.
+ground_truth:
+  root_cause: "PersistentVolumeClaim cannot bind (no PV, no storage class)"
+  top_hypothesis_category: pvc
+  min_score: 0.85
+  expected_finding_analyzers:
+    - pvc
+    - scheduling
+  expected_status: PVCUNBOUND

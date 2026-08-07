@@ -6,9 +6,10 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 
@@ -79,13 +80,13 @@ func TestCollectPodNormalizesObservations(t *testing.T) {
 	ns, name := "prod", "checkout-7f84c9"
 	pod := fakePod(t, ns, name)
 	client := fake.NewSimpleClientset(pod, fakeNode(), &corev1.Event{
-		ObjectMeta: metav1.ObjectMeta{Name: "e1", Namespace: ns},
+		ObjectMeta:     metav1.ObjectMeta{Name: "e1", Namespace: ns},
 		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: name, Namespace: ns},
-		Type:        "Warning",
-		Reason:      "OOMKilling",
-		Message:     "Killed container checkout",
-		Count:       3,
-		LastTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 14, 6, 3, 0, time.UTC)},
+		Type:           "Warning",
+		Reason:         "OOMKilling",
+		Message:        "Killed container checkout",
+		Count:          3,
+		LastTimestamp:  metav1.Time{Time: time.Date(2026, 8, 7, 14, 6, 3, 0, time.UTC)},
 	})
 
 	c := New(client)
@@ -162,9 +163,9 @@ func TestCollectDeploymentExpandsOwnerChain(t *testing.T) {
 	}
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "checkout",
-			Namespace: ns,
-			UID:       types.UID("dep-uid-1"),
+			Name:              "checkout",
+			Namespace:         ns,
+			UID:               types.UID("dep-uid-1"),
 			CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 14, 2, 1, 0, time.UTC)},
 		},
 		Status: appsv1.DeploymentStatus{Replicas: 1, UpdatedReplicas: 1},
@@ -194,4 +195,101 @@ func TestCollectDeploymentExpandsOwnerChain(t *testing.T) {
 	}
 }
 
+func TestCollectPvcServiceHPAObservations(t *testing.T) {
+	ns := "prod"
+	pod := fakePod(t, ns, "checkout-7f84c9")
+	// The pod needs the app label for service matching, a PVC volume, and a
+	// Deployment owner chain for the HPA lookup.
+	pod.Labels = map[string]string{"app": "checkout"}
+	pod.Spec.Volumes = []corev1.Volume{{
+		Name:         "data",
+		VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: "checkout-data"}},
+	}}
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checkout", Namespace: ns, UID: types.UID("dep-uid-1"),
+			CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)},
+		},
+	}
+	// RS owned by the deployment; pod owned by the RS.
+	pod.OwnerReferences = []metav1.OwnerReference{{Kind: "ReplicaSet", Name: "checkout-7f84c9", UID: types.UID("rs-uid-1"), Controller: boolPtr(true)}}
+	rs := &appsv1.ReplicaSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "checkout-7f84c9", Namespace: ns, UID: types.UID("rs-uid-1"),
+			OwnerReferences:   []metav1.OwnerReference{{Kind: "Deployment", Name: "checkout", UID: types.UID("dep-uid-1"), Controller: boolPtr(true)}},
+			CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)},
+		},
+	}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-data", Namespace: ns, CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)}},
+		Spec:       corev1.PersistentVolumeClaimSpec{Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("10Gi")}}},
+		Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+	}
+	svc := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-svc", Namespace: ns, CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)}},
+		Spec:       corev1.ServiceSpec{Selector: map[string]string{"app": "checkout"}, Ports: []corev1.ServicePort{{Port: 80}}},
+	}
+	eps := &corev1.Endpoints{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-svc", Namespace: ns},
+		Subsets: []corev1.EndpointSubset{{
+			Addresses: []corev1.EndpointAddress{{IP: "10.0.0.1"}},
+			Ports:     []corev1.EndpointPort{{Port: 80}},
+		}},
+	}
+	hpa := &autoscalingv2.HorizontalPodAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{Name: "checkout-hpa", Namespace: ns, CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)}},
+		Spec: autoscalingv2.HorizontalPodAutoscalerSpec{
+			ScaleTargetRef: autoscalingv2.CrossVersionObjectReference{Kind: "Deployment", Name: "checkout"},
+			MinReplicas:    int32Ptr(1),
+			MaxReplicas:    5,
+		},
+		Status: autoscalingv2.HorizontalPodAutoscalerStatus{CurrentReplicas: 5, DesiredReplicas: 5},
+	}
+
+	client := fake.NewSimpleClientset(pod, rs, dep, pvc, svc, eps, hpa, fakeNode())
+	c := New(client)
+	obs, _, err := c.Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{{Kind: "pod", Namespace: ns, Name: "checkout-7f84c9"}},
+		Window: api.Window{
+			Start: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC),
+			End:   time.Date(2026, 8, 7, 15, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	byKind := map[string]int{}
+	for _, o := range obs {
+		byKind[o.Kind]++
+	}
+	if byKind["pvc.state"] != 1 {
+		t.Errorf("pvc.state = %d, want 1", byKind["pvc.state"])
+	}
+	if byKind["service.state"] != 1 {
+		t.Errorf("service.state = %d, want 1", byKind["service.state"])
+	}
+	if byKind["hpa.state"] != 1 {
+		t.Errorf("hpa.state = %d, want 1", byKind["hpa.state"])
+	}
+	// Endpoints: 1 ready of 1 total; HPA at max (5/5); PVC pending.
+	for _, o := range obs {
+		switch o.Kind {
+		case "service.state":
+			if o.Payload["ready_endpoints"] != 1 {
+				t.Errorf("ready_endpoints = %v, want 1", o.Payload["ready_endpoints"])
+			}
+		case "hpa.state":
+			if o.Payload["at_max"] != true {
+				t.Errorf("hpa at_max = %v, want true (5/5)", o.Payload["at_max"])
+			}
+		case "pvc.state":
+			if o.Payload["phase"] != "Pending" {
+				t.Errorf("pvc phase = %v, want Pending", o.Payload["phase"])
+			}
+		}
+	}
+}
+
 func boolPtr(b bool) *bool { return &b }
+
+func int32Ptr(v int32) *int32 { return &v }

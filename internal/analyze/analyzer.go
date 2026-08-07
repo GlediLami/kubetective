@@ -27,13 +27,9 @@ type AnalysisInput struct {
 
 // EvidenceRequest describes evidence an analyzer would need to strengthen or
 // refute a live hypothesis — this drives the adaptive collection loop.
-type EvidenceRequest struct {
-	HypothesisID string
-	Description  string
-	Collector    string // e.g. "kubernetes", "prometheus"
-	QueryHint    string
-	Cost         int // rough relative cost, used by the engine's collection budget
-}
+// Alias of model.EvidenceRequest: kept here so analyzer implementations use
+// the analyze package name only.
+type EvidenceRequest = model.EvidenceRequest
 
 // Analyzer is the unit of deterministic reasoning.
 type Analyzer interface {
