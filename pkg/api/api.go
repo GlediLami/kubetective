@@ -40,6 +40,21 @@ type Window struct {
 	End   time.Time
 }
 
+// Contains reports whether t falls inside the window. A zero window contains
+// everything (callers are expected to default it via Since before use).
+func (w Window) Contains(t time.Time) bool {
+	if w.Start.IsZero() && w.End.IsZero() {
+		return true
+	}
+	if !w.Start.IsZero() && t.Before(w.Start) {
+		return false
+	}
+	if !w.End.IsZero() && t.After(w.End) {
+		return false
+	}
+	return true
+}
+
 // Since is a convenience: returns a window ending now.
 func Since(d time.Duration) Window {
 	end := time.Now()
@@ -67,6 +82,7 @@ const (
 type InvestigationResult struct {
 	Incident        *model.IncidentSummary `json:"incident,omitempty"`
 	Observations    []model.Observation    `json:"observations,omitempty"`
+	Evidence        []model.Evidence       `json:"evidence,omitempty"`
 	Timeline        []model.TimelineEvent  `json:"timeline,omitempty"`
 	Graph           *model.Graph           `json:"graph,omitempty"`
 	Changes         []model.Change         `json:"changes,omitempty"`

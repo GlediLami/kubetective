@@ -256,6 +256,7 @@ type IncidentMeta struct {
 	K8sVersion    string `json:"k8s_version,omitempty"`
 	EngineVersion string `json:"engine_version"`
 	RecordVersion int    `json:"record_version"`
+	Target        string `json:"target,omitempty"` // request target (for replay)
 	UserNote      string `json:"user_note,omitempty"`
 }
 

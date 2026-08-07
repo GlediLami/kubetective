@@ -1,7 +1,9 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.0 — architecture draft + scaffold.** The design is settled in
-> [`docs/DESIGN.md`](docs/DESIGN.md); implementation is starting.
+> **Status: v0.1 — first working milestone.** Investigate a pod/deployment,
+> get an evidence-backed diagnosis (OOMKilled, CrashLoopBackOff, ImagePull),
+> record every investigation as JSONL, replay it, and gate analyzers with the
+> scenario benchmark. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
 (`pod/checkout-7f84c9`, `deployment/checkout`, `--since=30m`) it collects facts, builds a
@@ -18,18 +20,25 @@ kubedoctor replay <incident-id>                # replay a recorded investigation
 kubedoctor benchmark                           # scenario benchmark gate
 ```
 
-## Quick start (scaffold)
+## Quick start
 
 ```bash
 make build          # builds bin/kubedoctor and bin/kubectl-investigate
 make test           # unit tests
+make install-plugin # kubectl investigate … now works (installs to ~/.local/bin)
 ```
 
-Install the plugin so `kubectl investigate …` works:
+### 30-second live demo (kind)
 
 ```bash
-make install-plugin # copies kubectl-investigate into your kubectl plugin path
+kind create cluster --name kubedoctor-demo
+kubectl apply -k scenarios/oom-after-deploy/manifests   # breaks a workload on purpose
+sleep 90
+kubectl investigate deployment/checkout -n prod --since=10m
 ```
+
+You get an evidence-backed OOM diagnosis: root cause, scored evidence, timeline, and a
+recorded incident you can replay (`kubedoctor replay <incident-id>`).
 
 ## Design
 

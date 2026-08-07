@@ -1,0 +1,12 @@
+name: oom-after-deploy
+description: >-
+  Memory exhaustion after deployment checkout-v42 (CACHE_SIZE 5000 → 50000):
+  memory grows past the 1Gi limit, the container is OOMKilled repeatedly
+  (17 terminations), and the deployment never becomes available.
+ground_truth:
+  root_cause: "Memory exhaustion: container exceeded its memory limit (OOMKilled)"
+  top_hypothesis_category: memory
+  min_score: 0.9
+  expected_finding_analyzers:
+    - oom
+  expected_status: OOMKILLED

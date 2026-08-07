@@ -4,28 +4,57 @@
 package cli
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
+	"github.com/kubedoctor/kubedoctor/internal/benchmark"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
+	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
 	"github.com/kubedoctor/kubedoctor/internal/engine"
 	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/kubedoctor/kubedoctor/internal/record"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
 // Execute runs the root command and exits with a non-zero code on failure.
 func Execute() {
-	if err := newRoot().Execute(); err != nil {
+	root := newRoot()
+	// kubectl plugin invocation: `kubectl investigate <target>` runs
+	// `kubectl-investigate <target>`, so the first positional argument is the
+	// investigation target, not a subcommand.
+	if isPluginInvocation() {
+		args := os.Args[1:]
+		if len(args) > 0 && !isKnownCommand(args[0]) {
+			args = append([]string{"investigate"}, args...)
+			root.SetArgs(args)
+		}
+	}
+	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+func isPluginInvocation() bool {
+	base := filepath.Base(os.Args[0])
+	return base == "kubectl-investigate" || strings.HasPrefix(base, "kubectl-investigate")
+}
+
+func isKnownCommand(arg string) bool {
+	switch arg {
+	case "investigate", "replay", "benchmark", "doctor", "version", "help", "completion":
+		return true
+	}
+	return false
 }
 
 func newRoot() *cobra.Command {
@@ -51,18 +80,27 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	return root
 }
 
-// buildEngine wires the registry skeletons. The v0.1 milestone registers the
-// Kubernetes collector and the OOM/CrashLoop/ImagePull analyzers here.
-func buildEngine() (*engine.Engine, error) {
-	return engine.New(collect.NewRegistry(), analyze.NewRegistry()), nil
+// newEngine wires the v0.1 analyzer set with the given collectors.
+func newEngine(collectors ...collect.Collector) *engine.Engine {
+	reg := collect.NewRegistry()
+	for _, c := range collectors {
+		reg.Register(c)
+	}
+	ar := analyze.NewRegistry()
+	ar.Register(oom.New())
+	ar.Register(crashloop.New())
+	ar.Register(imagepull.New())
+	return engine.New(reg, ar)
 }
 
 func newInvestigateCmd() *cobra.Command {
 	var (
-		namespace string
-		since     time.Duration
-		noLogs    bool
-		format    string
+		namespace  string
+		since      time.Duration
+		noLogs     bool
+		format     string
+		kubeconfig string
+		context    string
 	)
 	cmd := &cobra.Command{
 		Use:   "investigate <resource>",
@@ -76,10 +114,11 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			eng, err := buildEngine()
+			client, err := k8scollect.Client(kubeconfig, context)
 			if err != nil {
-				return err
+				return fmt.Errorf("connect to cluster: %w", err)
 			}
+			eng := newEngine(k8scollect.New(client))
 			req := &api.InvestigationRequest{
 				Target: target,
 				Window: api.Since(since),
@@ -87,23 +126,26 @@ func newInvestigateCmd() *cobra.Command {
 			}
 			res, err := eng.Investigate(cmd.Context(), req)
 			if err != nil {
-				if errors.Is(err, engine.ErrNoCollectors) {
-					return fmt.Errorf("%w — the Kubernetes collector lands in the v0.1 milestone (see docs/DESIGN.md)", err)
-				}
 				return err
 			}
-			switch format {
-			case "json":
-				return renderJSON(res)
-			default:
-				return renderText(res)
+			// Record every investigation (replay substrate, docs/DESIGN.md §7.6).
+			store := record.NewDefaultStore()
+			inc := record.BuildIncident(engine.Version, req, res)
+			if path, serr := store.Save(inc); serr == nil {
+				res.Meta.RecordID = path
 			}
+			if format == "json" {
+				return renderJSON(res)
+			}
+			return renderText(res)
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "kubernetes namespace")
 	cmd.Flags().DurationVar(&since, "since", 30*time.Minute, "investigation window: how far back to look")
 	cmd.Flags().BoolVar(&noLogs, "no-logs", false, "skip container log collection")
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text | json")
+	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: KUBECONFIG or ~/.kube/config)")
+	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
 	return cmd
 }
 
@@ -111,21 +153,56 @@ func newReplayCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "replay <incident-id>",
 		Short: "Replay a recorded investigation",
-		Args:  cobra.ExactArgs(1),
+		Long: `Replays a recorded investigation through the current engine version:
+loads the JSONL incident record, serves the recorded observations back to the
+pipeline, and re-runs analysis. Deterministic: same record + same engine →
+same result.`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("replay lands in the v0.1 milestone (incident records are JSONL)")
+			store := record.NewDefaultStore()
+			inc, err := store.Load(args[0])
+			if err != nil {
+				return fmt.Errorf("load incident %q: %w", args[0], err)
+			}
+			target, err := parseResourceRef(inc.Meta.Target, "")
+			if err != nil {
+				target = model.ResourceRef{Kind: "pod", Name: "scenario"}
+			}
+			eng := newEngine(record.NewReplayCollector(inc.Observations))
+			res, err := eng.Investigate(cmd.Context(), &api.InvestigationRequest{Target: target})
+			if err != nil {
+				return err
+			}
+			res.Meta.RecordID = args[0]
+			return renderText(res)
 		},
 	}
 }
 
 func newBenchmarkCmd() *cobra.Command {
-	return &cobra.Command{
+	var scenariosDir string
+	cmd := &cobra.Command{
 		Use:   "benchmark [suite]",
 		Short: "Run the scenario benchmark gate",
+		Long: `Replays every scenario in scenarios/ through the engine and asserts the
+ground truth (top hypothesis category, minimum score, expected findings).
+Exit code 1 if any scenario fails — this is the analyzer contribution gate.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("benchmark lands in the v0.1 milestone (scenarios/)")
+			if len(args) == 1 {
+				scenariosDir = args[0]
+			}
+			results, err := benchmark.RunSuite(cmd.Context(), scenariosDir, func(cs ...collect.Collector) api.Investigator {
+				return newEngine(cs...)
+			})
+			if err != nil {
+				return err
+			}
+			return renderBenchmark(results)
 		},
 	}
+	cmd.Flags().StringVar(&scenariosDir, "scenarios", "scenarios", "directory containing benchmark scenarios")
+	return cmd
 }
 
 func newDoctorCmd() *cobra.Command {
@@ -133,7 +210,7 @@ func newDoctorCmd() *cobra.Command {
 		Use:   "doctor",
 		Short: "Quick cluster health scan (static analyzers only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("doctor lands in the v0.1 milestone")
+			return fmt.Errorf("doctor lands in a later v0.1 milestone")
 		},
 	}
 }
@@ -154,9 +231,12 @@ func newVersionCmd() *cobra.Command {
 // name (defaults to pod) into a ResourceRef.
 func parseTarget(args []string, namespace string) (model.ResourceRef, error) {
 	if len(args) == 0 {
-		return model.ResourceRef{}, nil // namespace-wide investigation
+		return model.ResourceRef{Kind: "namespace", Namespace: namespace, Name: namespace}, nil
 	}
-	raw := args[0]
+	return parseResourceRef(args[0], namespace)
+}
+
+func parseResourceRef(raw, namespace string) (model.ResourceRef, error) {
 	ref := model.ResourceRef{Namespace: namespace}
 	if strings.Contains(raw, "/") {
 		parts := strings.SplitN(raw, "/", 2)
@@ -169,5 +249,3 @@ func parseTarget(args []string, namespace string) (model.ResourceRef, error) {
 	}
 	return ref, nil
 }
-
-var _ = context.Background // placeholder until collectors are wired

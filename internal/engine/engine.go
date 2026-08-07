@@ -16,15 +16,16 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/score"
+	"github.com/kubedoctor/kubedoctor/internal/timeline"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
 // ErrNoCollectors is returned when the engine is invoked without any wired
-// data source — the v0.1 Kubernetes collector is the first thing to land.
+// data source.
 var ErrNoCollectors = errors.New("engine: no collectors registered")
 
 // Version is stamped at build time (-ldflags "-X github.com/kubedoctor/kubedoctor/internal/engine.Version=...").
-var Version = "v0.0.0-dev"
+var Version = "v0.1.0-dev"
 
 // Engine implements api.Investigator.
 type Engine struct {
@@ -48,11 +49,12 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	var gaps []model.EvidenceGap
 
 	// Stage 1 — scope resolution: bounded worklist of related resources.
-	// v0.1: owner chains + selectors (implementation lands with the k8s collector).
+	// v0.1: the target itself; owner-chain expansion happens inside the
+	// Kubernetes collector.
 	targets := []model.ResourceRef{req.Target}
 
-	// Stage 2 — collection: parallel collectors normalize raw data into
-	// Observations. A collector failure is a gap, never a fatal error.
+	// Stage 2 — collection: collectors normalize raw data into Observations.
+	// A collector failure is a gap, never a fatal error.
 	scopePlan := &collect.ScopePlan{
 		Targets:     targets,
 		Window:      req.Window,
@@ -75,11 +77,12 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 			sources = append(sources, r.System)
 		}
 	}
+	// Dedup by content-hashed ID (identical facts from overlapping queries).
+	observations = dedup(observations)
 
-	// Stage 3 — build: timeline (merge/dedup/anchor) + evidence graph.
-	// v0.1: graph/timeline builders land with the model tests; the result
-	// shape is already the stable api contract.
-	graph := &model.Graph{Nodes: targets}
+	// Stage 3 — build: timeline (merge/dedup/anchor). The evidence graph
+	// builder lands in v0.2 (docs/DESIGN.md roadmap).
+	events := timeline.Build(observations)
 
 	// Stage 4 — analysis: deterministic analyzers emit findings, hypotheses,
 	// and evidence over the normalized observations.
@@ -89,7 +92,7 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	for _, a := range e.analyzers.All() {
 		fs, hs, evs, err := a.Analyze(ctx, &analyze.AnalysisInput{
 			Observations: observations,
-			Graph:        graph,
+			Graph:        &model.Graph{},
 		})
 		if err != nil {
 			gaps = append(gaps, model.EvidenceGap{
@@ -103,32 +106,20 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 		evidence = append(evidence, evs...)
 	}
 
-	// Stage 5 — scoring: explainable margin + sigmoid per hypothesis.
-	// v0.1: scoring is wired; evidence terms are supplied by analyzers.
-	for i := range hypotheses {
-		if hypotheses[i].Score == nil {
-			continue
-		}
-	}
-
-	// Stage 6 — record + report: the result is the api contract; the incident
-	// recorder (JSONL) lands with record/ in the v0.1 milestone.
-
-	// Outcome summary: engine is read-only; recommendations come from the
-	// deterministic rule table once analyzers ship.
+	// Stage 5 — outcome: status/severity from findings, confidence from the
+	// top hypothesis. (Scoring happens inside analyzers via internal/score.)
 	summary := &model.IncidentSummary{
 		ID:       fmt.Sprintf("incident-%d", started.Unix()),
 		Target:   req.Target,
-		Status:   "INVESTIGATED",
-		Severity: model.SevInfo,
+		Status:   statusFromFindings(findings),
+		Severity: severityFromFindings(findings),
 	}
-
 	res := &api.InvestigationResult{
 		Incident:     summary,
 		Observations: observations,
-		Timeline:     nil, // timeline builder lands in v0.1 milestone
-		Graph:        graph,
-		Changes:      nil,
+		Evidence:     evidence,
+		Timeline:     events,
+		Graph:        &model.Graph{},
 		Hypotheses:   hypotheses,
 		Findings:     findings,
 		EvidenceGaps: gaps,
@@ -139,11 +130,60 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 			SourcesHit:    sources,
 		},
 	}
-
-	// Confidence: top hypothesis score, if any.
 	if top := score.Top(hypotheses); top != nil {
 		summary.Confidence = top.Score.Score
-		summary.Status = "DIAGNOSED"
 	}
 	return res, nil
+}
+
+// dedup keeps the first observation per content-hashed ID.
+func dedup(obs []model.Observation) []model.Observation {
+	seen := make(map[string]bool, len(obs))
+	out := make([]model.Observation, 0, len(obs))
+	for _, o := range obs {
+		if seen[o.ID] {
+			continue
+		}
+		seen[o.ID] = true
+		out = append(out, o)
+	}
+	return out
+}
+
+// statusFromFindings derives the incident status card from analyzer findings.
+func statusFromFindings(fs []model.Finding) string {
+	status := "INVESTIGATED"
+	for _, f := range fs {
+		switch f.Analyzer {
+		case "oom":
+			if status != "OOMKILLED" {
+				status = "OOMKILLED"
+			}
+		case "crashloop":
+			if status == "INVESTIGATED" {
+				status = "CRASHLOOPBACKOFF"
+			}
+		case "imagepull":
+			if status == "INVESTIGATED" {
+				status = "IMAGEPULLBACKOFF"
+			}
+		}
+	}
+	return status
+}
+
+func severityFromFindings(fs []model.Finding) model.Severity {
+	sev := model.SevInfo
+	for _, f := range fs {
+		if f.Severity == model.SevCritical {
+			return model.SevCritical
+		}
+		if f.Severity == model.SevHigh && sev != model.SevCritical {
+			sev = model.SevHigh
+		}
+		if f.Severity == model.SevWarning && sev == model.SevInfo {
+			sev = model.SevWarning
+		}
+	}
+	return sev
 }

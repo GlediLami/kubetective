@@ -8,6 +8,7 @@ package analyze
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
@@ -43,6 +44,52 @@ type Analyzer interface {
 	NeedsEvidence(h model.Hypothesis) []EvidenceRequest
 	// Explain renders a finding for the CLI even without an LLM.
 	Explain(f model.Finding) string
+}
+
+// PayloadInt64 reads an int64 field tolerating both live (int64) and
+// JSON-round-tripped (float64) payloads — analyzers must not depend on the
+// in-memory representation, because replay serves JSON-decoded observations.
+func PayloadInt64(p map[string]any, key string) (int64, bool) {
+	switch v := p[key].(type) {
+	case int64:
+		return v, true
+	case int32:
+		return int64(v), true
+	case int:
+		return int64(v), true
+	case int16:
+		return int64(v), true
+	case int8:
+		return int64(v), true
+	case float64:
+		return int64(v), true
+	case float32:
+		return int64(v), true
+	case json.Number:
+		n, err := v.Int64()
+		return n, err == nil
+	}
+	return 0, false
+}
+
+// PayloadStringMap reads a string→string map field tolerating both live
+// (map[string]string) and JSON-round-tripped (map[string]any) payloads.
+func PayloadStringMap(p map[string]any, key string) (map[string]string, bool) {
+	switch m := p[key].(type) {
+	case map[string]string:
+		return m, true
+	case map[string]any:
+		out := make(map[string]string, len(m))
+		for k, v := range m {
+			s, ok := v.(string)
+			if !ok {
+				return nil, false
+			}
+			out[k] = s
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 // Registry holds the analyzers wired into an engine instance.

@@ -1,0 +1,178 @@
+// Package benchmark implements the scenario benchmark gate: each scenario
+// (scenarios/<name>/) carries a ground-truth spec (scenario.yaml) and a
+// recorded investigation (record.jsonl). The gate replays the record through
+// the real engine and asserts the diagnosis — the contribution rule for new
+// analyzers (docs/DESIGN.md §11, §17.2).
+package benchmark
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+
+	"gopkg.in/yaml.v3"
+
+	"github.com/kubedoctor/kubedoctor/internal/collect"
+	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/kubedoctor/kubedoctor/internal/record"
+	"github.com/kubedoctor/kubedoctor/pkg/api"
+)
+
+// Scenario is the ground-truth spec of one benchmark scenario.
+type Scenario struct {
+	Name        string     `yaml:"name"`
+	Description string     `yaml:"description"`
+	GroundTruth GroundTruth `yaml:"ground_truth"`
+}
+
+type GroundTruth struct {
+	RootCause                string   `yaml:"root_cause"`
+	TopHypothesisCategory    string   `yaml:"top_hypothesis_category"`
+	MinScore                 float64  `yaml:"min_score"`
+	ExpectedFindingAnalyzers []string `yaml:"expected_finding_analyzers"`
+	ExpectedStatus           string   `yaml:"expected_status,omitempty"`
+}
+
+// Result is one scenario's verdict with the reasons behind it.
+type Result struct {
+	Scenario      string
+	Passed        bool
+	Reasons       []string
+	Duration      time.Duration
+	TopHypothesis string
+	Score         float64
+	Status        string
+}
+
+func (r *Result) Fail(format string, args ...any) {
+	r.Passed = false
+	r.Reasons = append(r.Reasons, fmt.Sprintf(format, args...))
+}
+
+// LoadScenario reads a scenario.yaml.
+func LoadScenario(path string) (*Scenario, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var sc Scenario
+	if err := yaml.Unmarshal(b, &sc); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	if sc.Name == "" {
+		return nil, fmt.Errorf("%s: scenario missing name", path)
+	}
+	return &sc, nil
+}
+
+// RunScenario replays recorded observations through the engine and asserts
+// the ground truth. The caller wires the engine with a ReplayCollector for
+// the scenario's observations (no live collectors).
+func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Result, error) {
+	started := time.Now()
+	res := &Result{Scenario: sc.Name, Passed: true}
+
+	req := &api.InvestigationRequest{Target: model.ResourceRef{Kind: "pod", Name: "scenario"}}
+	out, err := eng.Investigate(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("%s: investigate: %w", sc.Name, err)
+	}
+	res.Duration = time.Since(started)
+	res.Status = ""
+	if out.Incident != nil {
+		res.Status = out.Incident.Status
+	}
+
+	gt := sc.GroundTruth
+	top := topHypothesis(out)
+
+	if gt.TopHypothesisCategory != "" || gt.MinScore > 0 {
+		if top == nil {
+			res.Fail("no hypothesis generated")
+		} else {
+			res.TopHypothesis = top.Claim
+			res.Score = top.Score.Score
+			if gt.TopHypothesisCategory != "" && string(top.Category) != gt.TopHypothesisCategory {
+				res.Fail("top hypothesis category = %s, want %s", top.Category, gt.TopHypothesisCategory)
+			}
+			if gt.MinScore > 0 && top.Score.Score < gt.MinScore {
+				res.Fail("top hypothesis score = %.3f, want ≥ %.3f", top.Score.Score, gt.MinScore)
+			}
+		}
+	}
+	if gt.ExpectedStatus != "" && res.Status != gt.ExpectedStatus {
+		res.Fail("incident status = %s, want %s", res.Status, gt.ExpectedStatus)
+	}
+	for _, want := range gt.ExpectedFindingAnalyzers {
+		if !hasAnalyzer(out.Findings, want) {
+			res.Fail("missing finding from analyzer %q", want)
+		}
+	}
+	return res, nil
+}
+
+func topHypothesis(out *api.InvestigationResult) *model.Hypothesis {
+	var top *model.Hypothesis
+	for i := range out.Hypotheses {
+		h := &out.Hypotheses[i]
+		if h.Score == nil {
+			continue
+		}
+		if top == nil || h.Score.Score > top.Score.Score {
+			top = h
+		}
+	}
+	return top
+}
+
+func hasAnalyzer(fs []model.Finding, id string) bool {
+	for _, f := range fs {
+		if f.Analyzer == id {
+			return true
+		}
+	}
+	return false
+}
+
+// EngineFactory builds an engine with the given collectors wired (plus the
+// analyzer set). Used by the suite to give each scenario its own replay data.
+type EngineFactory func(collectors ...collect.Collector) api.Investigator
+
+// RunSuite replays every scenario under scenariosDir and returns per-scenario
+// results in name order.
+func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) ([]Result, error) {
+	entries, err := os.ReadDir(scenariosDir)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+	for _, e := range entries {
+		if e.IsDir() {
+			dirs = append(dirs, e.Name())
+		}
+	}
+	sort.Strings(dirs)
+
+	var results []Result
+	for _, d := range dirs {
+		dir := filepath.Join(scenariosDir, d)
+		sc, err := LoadScenario(filepath.Join(dir, "scenario.yaml"))
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", d, err)
+		}
+		inc, err := record.NewStore(dir).Load("record")
+		if err != nil {
+			return nil, fmt.Errorf("%s: load record.jsonl: %w", d, err)
+		}
+		eng := factory(record.NewReplayCollector(inc.Observations))
+		r, err := RunScenario(ctx, sc, eng)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, *r)
+	}
+	return results, nil
+}

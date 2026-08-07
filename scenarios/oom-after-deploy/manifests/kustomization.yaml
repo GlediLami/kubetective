@@ -1,0 +1,6 @@
+# Live-cluster setup for the oom-after-deploy scenario (integration benchmark).
+# Usage: kind create cluster && kubectl apply -k .
+# The workload allocates memory past its 1Gi limit → OOMKilled → CrashLoopBackOff.
+resources:
+  - namespace.yaml
+  - deployment.yaml
