@@ -215,6 +215,7 @@ type Recommendation struct {
 	Evidence []string `json:"evidence,omitempty"`
 }
 
+// Risk of an action/recommendation (blast-radius informed).
 type Risk string
 
 const (

@@ -44,10 +44,13 @@ func NewDefaultStore() *Store { return NewStore(DefaultDir()) }
 
 // line is one JSONL record. Meta is the first line of a file.
 type line struct {
-	Type        string                    `json:"type"` // meta | observation | result
+	Type        string                    `json:"type"` // meta | observation | result | action.audit | ...
 	Meta        *incidentMetaLine         `json:"meta,omitempty"`
 	Observation *model.Observation        `json:"observation,omitempty"`
-	Result      *model.IncidentResultRecord `json:"result,omitempty"`
+	// Result is lazy-parsed: the file is an append-only log that also carries
+	// foreign line kinds (action.audit etc.) whose fields must never break
+	// replay (regression: audit's string "result" field collided here).
+	Result json.RawMessage `json:"result,omitempty"`
 }
 
 type incidentMetaLine struct {
@@ -114,7 +117,7 @@ func (s *Store) Save(inc *model.Incident) (string, error) {
 		IncidentID:    inc.ID,
 		RecordVersion: inc.Meta.RecordVersion,
 		EngineVersion: inc.Meta.EngineVersion,
-		Target:        inc.Meta.UserNote,
+		Target:        inc.Meta.Target,
 		Created:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := enc.Encode(line{Type: "meta", Meta: &meta}); err != nil {
@@ -127,7 +130,11 @@ func (s *Store) Save(inc *model.Incident) (string, error) {
 		}
 	}
 	if inc.Result != nil {
-		if err := enc.Encode(line{Type: "result", Result: inc.Result}); err != nil {
+		raw, err := json.Marshal(inc.Result)
+		if err != nil {
+			return "", err
+		}
+		if err := enc.Encode(line{Type: "result", Result: raw}); err != nil {
 			return "", err
 		}
 	}
@@ -179,8 +186,11 @@ func (s *Store) Load(id string) (*model.Incident, error) {
 				inc.Observations = append(inc.Observations, *l.Observation)
 			}
 		case "result":
-			if l.Result != nil {
-				inc.Result = l.Result
+			if len(l.Result) > 0 {
+				var rr model.IncidentResultRecord
+				if err := json.Unmarshal(l.Result, &rr); err == nil {
+					inc.Result = &rr
+				}
 			}
 		}
 	}
@@ -209,7 +219,9 @@ func (s *Store) List() ([]string, error) {
 		}
 		ids = append(ids, strings.TrimSuffix(e.Name(), ".jsonl"))
 	}
-	sort.Strings(ids)
+	// Incident IDs embed a unix timestamp, so lexical order is chronological;
+	// newest first matches the documented contract.
+	sort.Sort(sort.Reverse(sort.StringSlice(ids)))
 	return ids, nil
 }
 

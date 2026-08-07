@@ -110,3 +110,24 @@ func TestBuildIncidentUsesRequestTarget(t *testing.T) {
 		t.Fatalf("incident ID = %q, want slug from target", inc.ID)
 	}
 }
+
+// TestTargetSurvivesSaveLoad is the regression for the meta-line bug where
+// Save wrote UserNote instead of Target, breaking replay/action_preview of
+// live incidents.
+func TestTargetSurvivesSaveLoad(t *testing.T) {
+	req := &api.InvestigationRequest{Target: model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}}
+	inc := BuildIncident("v0.1.0", req, &api.InvestigationResult{})
+	inc.Meta.Target = "deployment/prod/checkout"
+
+	store := NewStore(t.TempDir())
+	if _, err := store.Save(inc); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.Load(inc.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Meta.Target != "deployment/prod/checkout" {
+		t.Errorf("Meta.Target after round-trip = %q, want deployment/prod/checkout", got.Meta.Target)
+	}
+}

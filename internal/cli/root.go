@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/configregression"
@@ -90,6 +91,10 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	root.AddCommand(newBenchmarkCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newServeCmd())
+	root.AddCommand(newMCPCmd())
+	root.AddCommand(newIncidentsCmd())
+	root.AddCommand(newActionCmd())
 	return root
 }
 
@@ -111,6 +116,34 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(hpa.New())
 	ar.Register(configregression.New())
 	return engine.New(reg, ar)
+}
+
+// buildLiveCollectors wires the optional telemetry + gitops collectors on
+// top of the Kubernetes collector: k8s first (staged collection), then
+// Prometheus (--prometheus-url / env), git (--git-repo / env), and GitOps
+// CRDs via a dynamic client when available.
+func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo string) ([]collect.Collector, kubernetes.Interface, error) {
+	client, cfg, err := k8scollect.Client(kubeconfig, context)
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect to cluster: %w", err)
+	}
+	collectors := []collect.Collector{k8scollect.New(client)}
+	if prometheusURL == "" {
+		prometheusURL = os.Getenv("KUBEDOCTOR_PROMETHEUS")
+	}
+	if prometheusURL != "" {
+		collectors = append(collectors, promcollect.New(prometheusURL))
+	}
+	if gitRepo == "" {
+		gitRepo = os.Getenv("KUBEDOCTOR_GIT_REPO")
+	}
+	if gitRepo != "" {
+		collectors = append(collectors, gitcollect.New(gitRepo))
+	}
+	if dyn, derr := dynamic.NewForConfig(cfg); derr == nil {
+		collectors = append(collectors, gitopscollect.New(dyn))
+	}
+	return collectors, client, nil
 }
 
 func newInvestigateCmd() *cobra.Command {
@@ -140,29 +173,9 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			client, cfg, err := k8scollect.Client(kubeconfig, context)
+			collectors, _, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo)
 			if err != nil {
-				return fmt.Errorf("connect to cluster: %w", err)
-			}
-			// Optional telemetry + gitops: k8s first (staged collection),
-			// then Prometheus (--prometheus-url / env), git (--git-repo /
-			// env), and GitOps CRDs via a dynamic client when available.
-			collectors := []collect.Collector{k8scollect.New(client)}
-			url := prometheusURL
-			if url == "" {
-				url = os.Getenv("KUBEDOCTOR_PROMETHEUS")
-			}
-			if url != "" {
-				collectors = append(collectors, promcollect.New(url))
-			}
-			if gitRepo == "" {
-				gitRepo = os.Getenv("KUBEDOCTOR_GIT_REPO")
-			}
-			if gitRepo != "" {
-				collectors = append(collectors, gitcollect.New(gitRepo))
-			}
-			if dyn, derr := dynamic.NewForConfig(cfg); derr == nil {
-				collectors = append(collectors, gitopscollect.New(dyn))
+				return err
 			}
 			eng := newEngine(collectors...)
 			req := &api.InvestigationRequest{
