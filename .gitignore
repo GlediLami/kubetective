@@ -1,0 +1,12 @@
+# build output
+/bin/
+*.exe
+
+# incidents recorded by kubedoctor
+~/.kubedoctor/
+
+# editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
