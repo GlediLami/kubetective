@@ -1,0 +1,13 @@
+name: gitops-drift
+description: >-
+  ArgoCD reports the application Degraded and OutOfSync; the pods crash-loop.
+  The GitOps state corroborates a config regression even without a local git
+  checkout — the regression hypothesis fires on gitops evidence.
+ground_truth:
+  root_cause: "GitOps-drifted revision (Degraded/OutOfSync) crashing the workload"
+  top_hypothesis_category: config-regression
+  min_score: 0.75
+  expected_finding_analyzers:
+    - configregression
+    - crashloop
+  expected_status: CRASHLOOPBACKOFF

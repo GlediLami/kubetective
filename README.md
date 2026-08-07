@@ -1,12 +1,13 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.3 — complete.** Adaptive collection loop (analyzers request
-> targeted evidence, engine re-collects, bounded 2 rounds), rule-based
-> hypothesis engine (dedup, rerank, ruled-out rule), 9 analyzers (OOM,
-> CrashLoop, ImagePull, Scheduling, NodePressure, Probe, PVC, Service, HPA),
-> 11-scenario benchmark incl. healthy negative control, calibration reporting
-> (10 ground-truth points). Next: v0.4 Git/GitOps correlation and
-> recommendations. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: v0.4 — complete.** Git collector (commits touching target
+> manifests via go-git), GitOps collector (Flux Kustomization/HelmRelease +
+> ArgoCD Application via dynamic client, silent when CRDs are absent),
+> config-regression analyzer (commit/recency/GitOps-drift + symptom mechanism
+> — the "who changed it and why" hypothesis), risk-leveled read-only
+> recommendations, 13-scenario benchmark (calibration: 12 ground-truth
+> points, accuracy 100%). Next: v0.5 LLM explainer, v0.6 REST/MCP + approved
+> actions. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
 (`pod/checkout-7f84c9`, `deployment/checkout`, `--since=30m`) it collects facts, builds a
@@ -57,7 +58,7 @@ recorded incident you can replay (`kubedoctor replay <incident-id>`).
 | v0.1 | ✅ Evidence model, k8s collector, OOM/CrashLoop/ImagePull analyzers, timeline, record/replay, CLI, first 3 benchmark scenarios |
 | v0.2 | ✅ Evidence graph, scoring + calibration, change detector, Prometheus collector, scheduling/node-pressure/probe analyzers, 8 scenarios |
 | v0.3 | ✅ Adaptive collection (NeedsEvidence loop), rule-based hypothesis engine, pvc/service/hpa analyzers, 11 scenarios |
-| v0.4 | Git/ArgoCD/Flux correlation, recommendations |
+| v0.4 | ✅ Git + Flux/ArgoCD collectors, config-regression analyzer, risk-leveled recommendations |
 | v0.5 | LLM explainer (digest-only, local-LLM support) |
 | v0.6+ | REST, MCP server, preview + approved actions, incident memory |
 

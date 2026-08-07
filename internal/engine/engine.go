@@ -20,6 +20,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/graph"
 	"github.com/kubedoctor/kubedoctor/internal/hypothesis"
 	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/kubedoctor/kubedoctor/internal/recommend"
 	"github.com/kubedoctor/kubedoctor/internal/score"
 	"github.com/kubedoctor/kubedoctor/internal/timeline"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
@@ -126,6 +127,8 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	}
 	if top := score.Top(hypotheses); top != nil {
 		summary.Confidence = top.Score.Score
+		// Deterministic, risk-leveled recommendations (Phase 2, read-only).
+		res.Recommendations = recommend.ForTop(top, req.Target)
 	}
 	return res, nil
 }

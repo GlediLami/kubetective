@@ -1,0 +1,13 @@
+name: config-regression
+description: >-
+  The smoking gun case: commit 9f2c1a7d (bump CACHE_SIZE 5000 -> 50000)
+  landed 6 minutes before the first OOMKilled. The config-regression
+  hypothesis must beat the plain memory hypothesis.
+ground_truth:
+  root_cause: "Configuration regression: commit 9f2c1a7d raised CACHE_SIZE and memory usage past the limit"
+  top_hypothesis_category: config-regression
+  min_score: 0.8
+  expected_finding_analyzers:
+    - configregression
+    - oom
+  expected_status: OOMKILLED

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/configregression"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/hpa"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
@@ -23,7 +24,11 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/service"
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
+	"k8s.io/client-go/dynamic"
+
 	"github.com/kubedoctor/kubedoctor/internal/collect"
+	gitcollect "github.com/kubedoctor/kubedoctor/internal/collect/git"
+	gitopscollect "github.com/kubedoctor/kubedoctor/internal/collect/gitops"
 	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
 	promcollect "github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
 	"github.com/kubedoctor/kubedoctor/internal/engine"
@@ -103,6 +108,7 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(pvc.New())
 	ar.Register(service.New())
 	ar.Register(hpa.New())
+	ar.Register(configregression.New())
 	return engine.New(reg, ar)
 }
 
@@ -115,6 +121,7 @@ func newInvestigateCmd() *cobra.Command {
 		kubeconfig    string
 		context       string
 		prometheusURL string
+		gitRepo       string
 	)
 	cmd := &cobra.Command{
 		Use:   "investigate <resource>",
@@ -128,12 +135,13 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			client, err := k8scollect.Client(kubeconfig, context)
+			client, cfg, err := k8scollect.Client(kubeconfig, context)
 			if err != nil {
 				return fmt.Errorf("connect to cluster: %w", err)
 			}
-			// Optional telemetry: k8s collector first (staged collection),
-			// Prometheus second if configured (flag or env).
+			// Optional telemetry + gitops: k8s first (staged collection),
+			// then Prometheus (--prometheus-url / env), git (--git-repo /
+			// env), and GitOps CRDs via a dynamic client when available.
 			collectors := []collect.Collector{k8scollect.New(client)}
 			url := prometheusURL
 			if url == "" {
@@ -141,6 +149,15 @@ func newInvestigateCmd() *cobra.Command {
 			}
 			if url != "" {
 				collectors = append(collectors, promcollect.New(url))
+			}
+			if gitRepo == "" {
+				gitRepo = os.Getenv("KUBEDOCTOR_GIT_REPO")
+			}
+			if gitRepo != "" {
+				collectors = append(collectors, gitcollect.New(gitRepo))
+			}
+			if dyn, derr := dynamic.NewForConfig(cfg); derr == nil {
+				collectors = append(collectors, gitopscollect.New(dyn))
 			}
 			eng := newEngine(collectors...)
 			req := &api.InvestigationRequest{
@@ -171,6 +188,7 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
 	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBEDOCTOR_PROMETHEUS env) for metric evidence")
+	cmd.Flags().StringVar(&gitRepo, "git-repo", "", "path to the manifests git checkout (or KUBEDOCTOR_GIT_REPO env) for commit evidence")
 	return cmd
 }
 

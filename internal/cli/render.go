@@ -102,6 +102,13 @@ func renderText(res *api.InvestigationResult) error {
 		}
 	}
 
+	if len(res.Recommendations) > 0 {
+		fmt.Fprintln(w, "\nRECOMMENDATION")
+		for _, r := range res.Recommendations {
+			fmt.Fprintf(w, "  %s [%s] — %s\n", r.Action, r.Risk, r.Reason)
+		}
+	}
+
 	fmt.Fprintf(w, "\n%d observations · %d sources · %s",
 		len(res.Observations), len(res.Meta.SourcesHit), res.Meta.Duration.Round(time.Millisecond))
 	if res.Meta.RecordID != "" {

@@ -10,10 +10,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Client builds a kubernetes.Interface from the standard kubeconfig loading
-// rules (KUBECONFIG env / ~/.kube/config), with an in-cluster fallback.
-// kubeconfig and context are optional overrides ("" = defaults).
-func Client(kubeconfig, context string) (kubernetes.Interface, error) {
+// Client builds a kubernetes.Interface and its rest.Config from the standard
+// kubeconfig loading rules (KUBECONFIG env / ~/.kube/config), with an
+// in-cluster fallback. kubeconfig and context are optional overrides ("" =
+// defaults). The rest.Config lets callers build dynamic clients for CRDs.
+func Client(kubeconfig, context string) (kubernetes.Interface, *rest.Config, error) {
 	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if kubeconfig != "" {
 		loadingRules.ExplicitPath = kubeconfig
@@ -27,9 +28,11 @@ func Client(kubeconfig, context string) (kubernetes.Interface, error) {
 	if err != nil {
 		// In-cluster fallback (running inside a pod).
 		if cfg, icErr := rest.InClusterConfig(); icErr == nil {
-			return kubernetes.NewForConfig(cfg)
+			c, cErr := kubernetes.NewForConfig(cfg)
+			return c, cfg, cErr
 		}
-		return nil, err
+		return nil, nil, err
 	}
-	return kubernetes.NewForConfig(cfg)
+	c, err := kubernetes.NewForConfig(cfg)
+	return c, cfg, err
 }
