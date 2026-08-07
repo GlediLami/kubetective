@@ -1,0 +1,11 @@
+name: crashloop
+description: >-
+  Application api exits with code 1 repeatedly; kubelet backs off
+  (CrashLoopBackOff). No OOMKilled present — the crash is application-level.
+ground_truth:
+  root_cause: "Application crash loop: container exits repeatedly (exit code 1)"
+  top_hypothesis_category: crashloop
+  min_score: 0.8
+  expected_finding_analyzers:
+    - crashloop
+  expected_status: CRASHLOOPBACKOFF

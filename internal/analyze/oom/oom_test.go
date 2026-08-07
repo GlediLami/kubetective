@@ -109,9 +109,36 @@ func TestOOMAnalyzerInactiveWithoutOOM(t *testing.T) {
 	}
 }
 
-// TestOOMAnalyzerAfterJSONRoundTrip is the replay regression: observations
-// served from a record.jsonl have JSON-decoded payloads (map[string]any,
-// float64 numbers). Analyzers must produce identical evidence either way.
+// TestOOMAnalyzerUsesKubeletEvents: a crash-looping pod loses its terminated
+// state to CrashLoopBackOff — the kubelet's OOMKilling events are the
+// historical record and must activate the analyzer.
+func TestOOMAnalyzerUsesKubeletEvents(t *testing.T) {
+	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	in := &analyze.AnalysisInput{Observations: []model.Observation{
+		obs("container.spec", res, base, map[string]any{"limits": map[string]string{"memory": "1Gi"}}),
+		obs("container.waiting", res, base.Add(7*time.Minute), map[string]any{"reason": "CrashLoopBackOff", "restarts": int64(4)}),
+		obs("event.recorded", res, base.Add(3*time.Minute), map[string]any{"reason": "OOMKilling", "message": "Killed container checkout", "count": int64(4)}),
+		obs("event.recorded", res, base.Add(6*time.Minute), map[string]any{"reason": "OOMKilling", "message": "Killed container checkout", "count": int64(4)}),
+	}}
+	findings, hypotheses, _, err := New().Analyze(context.Background(), in)
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("findings = %d, want 1 (from OOMKilling events)", len(findings))
+	}
+	if findings[0].Title != "OOMKilled ×2" {
+		t.Errorf("title = %q, want %q (events counted)", findings[0].Title, "OOMKilled ×2")
+	}
+	if len(hypotheses) != 1 {
+		t.Fatalf("hypotheses = %d, want 1", len(hypotheses))
+	}
+	if hypotheses[0].Score == nil || hypotheses[0].Score.Score < 0.8 {
+		t.Errorf("score = %v, want ≥ 0.8 (mechanism via events + limit + reproduction)", hypotheses[0].Score)
+	}
+}
+
 func TestOOMAnalyzerAfterJSONRoundTrip(t *testing.T) {
 	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
 	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)

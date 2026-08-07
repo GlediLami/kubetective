@@ -1,9 +1,11 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.1 — first working milestone.** Investigate a pod/deployment,
-> get an evidence-backed diagnosis (OOMKilled, CrashLoopBackOff, ImagePull),
-> record every investigation as JSONL, replay it, and gate analyzers with the
-> scenario benchmark. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: v0.2 in progress.** v0.1 shipped: pod/deployment investigations,
+> evidence-backed diagnosis (OOMKilled, CrashLoopBackOff, ImagePull, Pending),
+> JSONL record/replay, scenario benchmark (5 scenarios, incl. healthy negative
+> control). v0.2 landed: bounded evidence graph (OWNS/RUNS_ON/CHANGED_BEFORE),
+> ranked "what changed" detector, owner-chain scope expansion. Next: Prometheus
+> collector, calibration. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
 (`pod/checkout-7f84c9`, `deployment/checkout`, `--since=30m`) it collects facts, builds a

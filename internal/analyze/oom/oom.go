@@ -15,10 +15,10 @@ import (
 )
 
 const (
-	weightTemporal   = 30.0
-	weightMechanism  = 20.0
-	weightLimit      = 15.0
-	weightReproduce  = 10.0
+	weightTemporal     = 30.0
+	weightMechanism    = 20.0
+	weightLimit        = 15.0
+	weightReproduce    = 10.0
 	weightNodePressure = 15.0 // contradiction when node is under pressure
 )
 
@@ -34,24 +34,35 @@ func (a *Analyzer) Supports(o model.Observation) bool {
 }
 
 func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]model.Finding, []model.Hypothesis, []model.Evidence, error) {
-	// Group terminations by pod resource.
+	// Group terminations by pod resource. A termination is either the current
+	// container state (container.terminated) or the historical record left by
+	// the kubelet (event.recorded OOMKilling) — crash-looping pods lose their
+	// current terminated state to CrashLoopBackOff, so the events are the
+	// authoritative history.
 	type crash struct {
-		obs      []model.Observation
-		limit    string
-		hasLimit bool
-		restarts int64
+		obs        []model.Observation
+		limit      string
+		hasLimit   bool
+		restarts   int64
+		fromEvents bool
 	}
 	groups := map[string]*crash{}
 	var order []string
 	for _, o := range in.Observations {
-		if a.Supports(o) {
-			key := o.Resource.String()
-			if groups[key] == nil {
-				groups[key] = &crash{}
-				order = append(order, key)
-			}
-			groups[key].obs = append(groups[key].obs, o)
+		isTerm := o.Kind == "container.terminated" && o.Payload["reason"] == "OOMKilled"
+		isEvent := o.Kind == "event.recorded" && o.Payload["reason"] == "OOMKilling"
+		if !isTerm && !isEvent {
+			continue
 		}
+		key := o.Resource.String()
+		if groups[key] == nil {
+			groups[key] = &crash{}
+			order = append(order, key)
+		}
+		if isEvent {
+			groups[key].fromEvents = true
+		}
+		groups[key].obs = append(groups[key].obs, o)
 	}
 	// Attach spec/state context per resource.
 	for _, o := range in.Observations {
@@ -101,6 +112,9 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		}
 		if restarts > 1 {
 			claim += fmt.Sprintf(" — %d restart(s)", restarts)
+		}
+		if n > 0 && g.fromEvents {
+			claim += " (incl. kubelet OOMKilling events)"
 		}
 		findings = append(findings, model.Finding{
 			ID:          fmt.Sprintf("oom.%s", res.Name),

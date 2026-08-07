@@ -66,6 +66,35 @@ func renderText(res *api.InvestigationResult) error {
 		}
 	}
 
+	if len(res.Changes) > 0 {
+		fmt.Fprintln(w, "\nWHAT CHANGED")
+		shown := 0
+		for _, ch := range res.Changes {
+			if shown >= 5 {
+				break
+			}
+			shown++
+			fmt.Fprintf(w, "  %d. %s — %s (relevance %.0f%%)\n",
+				shown, ch.Resource.String(), ch.Description, ch.Relevance*100)
+		}
+	}
+
+	if res.Graph != nil && len(res.Graph.Edges) > 0 {
+		fmt.Fprintln(w, "\nRELATIONSHIPS")
+		shown := 0
+		for _, e := range res.Graph.Edges {
+			if shown >= 8 {
+				fmt.Fprintf(w, "  … (%d more)\n", len(res.Graph.Edges)-shown)
+				break
+			}
+			shown++
+			fmt.Fprintf(w, "  %s --%s--> %s\n", e.From.String(), e.Kind, e.To.String())
+		}
+		if res.Graph.Bounds.Truncated {
+			fmt.Fprintf(w, "  ! graph truncated at budget (%s)\n", res.Graph.Bounds.TruncatedKind)
+		}
+	}
+
 	if len(res.EvidenceGaps) > 0 {
 		fmt.Fprintln(w, "\nEVIDENCE GAPS")
 		for _, g := range res.EvidenceGaps {

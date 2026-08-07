@@ -96,13 +96,17 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 				codes = append(codes, c)
 			}
 		}
+		exitLabel := "exit code(s) unknown"
+		if len(codes) > 0 {
+			exitLabel = fmt.Sprintf("exit codes %v", codes)
+		}
 
 		findings = append(findings, model.Finding{
 			ID:          fmt.Sprintf("crashloop.%s", res.Name),
 			Analyzer:    a.ID(),
 			Severity:    model.SevHigh,
 			Title:       fmt.Sprintf("CrashLoopBackOff (restarts: %d)", g.restarts),
-			Description: fmt.Sprintf("container keeps crashing and backing off; exit codes %v", codes),
+			Description: fmt.Sprintf("container keeps crashing and backing off; %s", exitLabel),
 			Timestamp:   lastTs(g.terminals),
 		})
 
@@ -150,8 +154,8 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 
 		h := model.Hypothesis{
 			ID:       fmt.Sprintf("crashloop.%s", res.Name),
-			Claim:    fmt.Sprintf("Application crash loop: container exits repeatedly (exit codes %v)", codes),
-			Category: model.CatConfig,
+			Claim:    fmt.Sprintf("Application crash loop: container exits repeatedly (%s)", exitLabel),
+			Category: model.CatCrashLoop,
 			Status:   model.StatusLikely,
 			Score:    scoreBreakdown(terms),
 		}

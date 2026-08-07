@@ -16,6 +16,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
@@ -90,6 +91,7 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(oom.New())
 	ar.Register(crashloop.New())
 	ar.Register(imagepull.New())
+	ar.Register(scheduling.New())
 	return engine.New(reg, ar)
 }
 

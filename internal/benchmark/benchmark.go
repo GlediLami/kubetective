@@ -34,6 +34,8 @@ type GroundTruth struct {
 	MinScore                 float64  `yaml:"min_score"`
 	ExpectedFindingAnalyzers []string `yaml:"expected_finding_analyzers"`
 	ExpectedStatus           string   `yaml:"expected_status,omitempty"`
+	// ExpectNoFindings asserts the engine stays silent (false-positive gate).
+	ExpectNoFindings bool `yaml:"expect_no_findings,omitempty"`
 }
 
 // Result is one scenario's verdict with the reasons behind it.
@@ -111,7 +113,23 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 			res.Fail("missing finding from analyzer %q", want)
 		}
 	}
+	if gt.ExpectNoFindings {
+		if len(out.Findings) != 0 {
+			res.Fail("expected no findings, got %d (false positive): %v", len(out.Findings), findingTitles(out.Findings))
+		}
+		if len(out.Hypotheses) != 0 {
+			res.Fail("expected no hypotheses, got %d (false positive)", len(out.Hypotheses))
+		}
+	}
 	return res, nil
+}
+
+func findingTitles(fs []model.Finding) []string {
+	var out []string
+	for _, f := range fs {
+		out = append(out, f.Analyzer+":"+f.Title)
+	}
+	return out
 }
 
 func topHypothesis(out *api.InvestigationResult) *model.Hypothesis {

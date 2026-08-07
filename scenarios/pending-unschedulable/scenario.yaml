@@ -1,0 +1,12 @@
+name: pending-unschedulable
+description: >-
+  Batch pod requests 4Gi memory but the only node cannot satisfy it; the
+  scheduler keeps failing (FailedScheduling, Insufficient memory) and the pod
+  stays Pending.
+ground_truth:
+  root_cause: "Pod unschedulable: 0/1 nodes available (Insufficient memory)"
+  top_hypothesis_category: scheduling
+  min_score: 0.85
+  expected_finding_analyzers:
+    - scheduling
+  expected_status: PENDING

@@ -117,6 +117,7 @@ const (
 	CatScheduling HypothesisCategory = "scheduling"
 	CatImage      HypothesisCategory = "image"
 	CatConfig     HypothesisCategory = "config-regression"
+	CatCrashLoop  HypothesisCategory = "crashloop"
 	CatNode       HypothesisCategory = "node"
 	CatProbe      HypothesisCategory = "probe"
 	CatHPA        HypothesisCategory = "hpa"

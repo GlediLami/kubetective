@@ -1,0 +1,11 @@
+name: imagepull
+description: >-
+  Deployment worker points at a non-existent image tag; kubelet cannot pull
+  it (ImagePullBackOff, manifest unknown). Pod stays Pending.
+ground_truth:
+  root_cause: "Image pull failure: image registry.example/worker:v9 does not exist"
+  top_hypothesis_category: image
+  min_score: 0.8
+  expected_finding_analyzers:
+    - imagepull
+  expected_status: IMAGEPULLBACKOFF

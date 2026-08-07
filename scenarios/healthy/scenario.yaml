@@ -1,0 +1,9 @@
+name: healthy
+description: >-
+  Negative control: a fully healthy workload (deployment available, pod
+  Running, zero restarts, node Ready). The engine must stay silent — this
+  gates false positives.
+ground_truth:
+  root_cause: ""
+  expect_no_findings: true
+  expected_status: INVESTIGATED

@@ -20,12 +20,14 @@ var criticalKinds = map[string]bool{
 }
 
 // Build merges, dedups (by Observation.ID), sorts, and anchors observations.
+// Zero-timestamp observations are skipped: they carry no temporal information
+// and would corrupt the anchor (defense against data-quality issues).
 func Build(observations []model.Observation) []model.TimelineEvent {
 	// Dedup by ID, keep the first occurrence (identical facts).
 	seen := make(map[string]bool, len(observations))
 	events := make([]model.TimelineEvent, 0, len(observations))
 	for _, o := range observations {
-		if seen[o.ID] {
+		if seen[o.ID] || o.Timestamp.IsZero() {
 			continue
 		}
 		seen[o.ID] = true
@@ -41,12 +43,18 @@ func Build(observations []model.Observation) []model.TimelineEvent {
 		return nil
 	}
 
-	// Anchor: earliest critical observation; fall back to the earliest event.
-	anchor := events[0].Observation.Timestamp
+	// Anchor: the earliest critical observation (termination/waiting/pod
+	// state). A non-critical event before it (e.g. a node condition from
+	// hours ago) must not drag the anchor back — fall back to the earliest
+	// event only when no critical observation exists.
+	var anchor time.Time
 	for _, ev := range events {
-		if criticalKinds[ev.Observation.Kind] && ev.Observation.Timestamp.Before(anchor) {
+		if criticalKinds[ev.Observation.Kind] && (anchor.IsZero() || ev.Observation.Timestamp.Before(anchor)) {
 			anchor = ev.Observation.Timestamp
 		}
+	}
+	if anchor.IsZero() {
+		anchor = events[0].Observation.Timestamp
 	}
 	for i := range events {
 		events[i].Offset = events[i].Observation.Timestamp.Sub(anchor)

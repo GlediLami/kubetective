@@ -13,7 +13,9 @@ import (
 	"time"
 
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
+	"github.com/kubedoctor/kubedoctor/internal/change"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
+	"github.com/kubedoctor/kubedoctor/internal/graph"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/score"
 	"github.com/kubedoctor/kubedoctor/internal/timeline"
@@ -80,9 +82,20 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	// Dedup by content-hashed ID (identical facts from overlapping queries).
 	observations = dedup(observations)
 
-	// Stage 3 — build: timeline (merge/dedup/anchor). The evidence graph
-	// builder lands in v0.2 (docs/DESIGN.md roadmap).
+	// Stage 3 — build: timeline (merge/dedup/anchor) + "what changed" ranking
+	// + the bounded evidence graph (docs/DESIGN.md §7.3, §8.3).
 	events := timeline.Build(observations)
+	onsetTs := time.Time{}
+	if len(events) > 0 {
+		if ts, ok := timeline.Anchor(events); ok {
+			onsetTs = ts
+		}
+	}
+
+	// Change detection needs the structural graph (OWNS/RUNS_ON) for ranking.
+	structural := graph.Build(observations, nil, nil, graph.Options{MaxNodes: scopeMaxNodes(req)})
+	changes := change.Rank(change.Detect(observations, req.Window.Start), structural, req.Target, onsetTs, windowSpan(req))
+	g := graph.Build(observations, changes, anchorEvent(events), graph.Options{MaxNodes: scopeMaxNodes(req)})
 
 	// Stage 4 — analysis: deterministic analyzers emit findings, hypotheses,
 	// and evidence over the normalized observations.
@@ -92,7 +105,8 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	for _, a := range e.analyzers.All() {
 		fs, hs, evs, err := a.Analyze(ctx, &analyze.AnalysisInput{
 			Observations: observations,
-			Graph:        &model.Graph{},
+			Graph:        g,
+			Changes:      changes,
 		})
 		if err != nil {
 			gaps = append(gaps, model.EvidenceGap{
@@ -119,7 +133,8 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 		Observations: observations,
 		Evidence:     evidence,
 		Timeline:     events,
-		Graph:        &model.Graph{},
+		Graph:        g,
+		Changes:      changes,
 		Hypotheses:   hypotheses,
 		Findings:     findings,
 		EvidenceGaps: gaps,
@@ -156,9 +171,7 @@ func statusFromFindings(fs []model.Finding) string {
 	for _, f := range fs {
 		switch f.Analyzer {
 		case "oom":
-			if status != "OOMKILLED" {
-				status = "OOMKILLED"
-			}
+			status = "OOMKILLED"
 		case "crashloop":
 			if status == "INVESTIGATED" {
 				status = "CRASHLOOPBACKOFF"
@@ -166,6 +179,10 @@ func statusFromFindings(fs []model.Finding) string {
 		case "imagepull":
 			if status == "INVESTIGATED" {
 				status = "IMAGEPULLBACKOFF"
+			}
+		case "scheduling":
+			if status == "INVESTIGATED" {
+				status = "PENDING"
 			}
 		}
 	}
@@ -186,4 +203,30 @@ func severityFromFindings(fs []model.Finding) model.Severity {
 		}
 	}
 	return sev
+}
+
+func scopeMaxNodes(req *api.InvestigationRequest) int {
+	if req.Scope.MaxGraphNodes > 0 {
+		return req.Scope.MaxGraphNodes
+	}
+	return 200
+}
+
+func windowSpan(req *api.InvestigationRequest) time.Duration {
+	if !req.Window.Start.IsZero() && !req.Window.End.IsZero() {
+		return req.Window.End.Sub(req.Window.Start)
+	}
+	return 30 * time.Minute
+}
+
+func anchorEvent(events []model.TimelineEvent) *model.TimelineEvent {
+	for i := range events {
+		if events[i].Offset == 0 {
+			return &events[i]
+		}
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return &events[0]
 }

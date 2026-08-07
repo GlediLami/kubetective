@@ -62,7 +62,24 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 		obs = append(obs, o...)
 		refs = append(refs, r...)
 	}
-	return obs, refs, nil
+	// Dedup at the boundary: overlapping scope expansion (e.g. deployment
+	// state fetched both directly and via the pod owner chain) emits the same
+	// content-hashed observation twice — collapse before handing over.
+	return dedupObservations(obs), refs, nil
+}
+
+// dedupObservations keeps the first observation per content-hashed ID.
+func dedupObservations(obs []model.Observation) []model.Observation {
+	seen := make(map[string]bool, len(obs))
+	out := make([]model.Observation, 0, len(obs))
+	for _, o := range obs {
+		if seen[o.ID] {
+			continue
+		}
+		seen[o.ID] = true
+		out = append(out, o)
+	}
+	return out
 }
 
 func (c *Collector) collectPod(ctx context.Context, scope *collect.ScopePlan, ns, name string) ([]model.Observation, []model.SourceRef, error) {
@@ -76,6 +93,13 @@ func (c *Collector) collectPod(ctx context.Context, scope *collect.ScopePlan, ns
 	}}
 	res := model.ResourceRef{Kind: "pod", Namespace: ns, Name: name}
 	obs := []model.Observation{podStateObservation(pod, res, refs[0])}
+	// Owner chain: emit one resource.owner observation per hop so the graph
+	// builder can link Pod ← ReplicaSet ← Deployment (or Pod ← Deployment).
+	obs = append(obs, c.ownerChainObservations(ctx, pod, res, refs[0])...)
+	// Scope expansion: fetch the top-level controller's state (Deployment /
+	// StatefulSet / DaemonSet) so a pod-target investigation can surface
+	// "the owning workload changed" (docs/DESIGN.md §8.1 Stage B).
+	obs = append(obs, c.controllerStateObservation(ctx, pod, res, refs[0])...)
 
 	// Container specs + states.
 	for i := range pod.Spec.Containers {
@@ -176,6 +200,76 @@ func (c *Collector) collectNamespace(ctx context.Context, scope *collect.ScopePl
 		refs = append(refs, r...)
 	}
 	return obs, refs, nil
+}
+
+// ownerChainObservations resolves the pod's owner (and the owner's owner, e.g.
+// ReplicaSet → Deployment) so the graph can build full OWNS chains.
+func (c *Collector) ownerChainObservations(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
+	var obs []model.Observation
+	for _, owner := range pod.OwnerReferences {
+		ownerRes := model.ResourceRef{Kind: owner.Kind, Namespace: pod.Namespace, Name: owner.Name}
+		obs = append(obs, collect.NewObservation(
+			"resource.owner",
+			ref,
+			pod.CreationTimestamp.Time,
+			res,
+			map[string]any{"owner_kind": owner.Kind, "owner_name": owner.Name},
+			1.0,
+		))
+		// One more hop up for ReplicaSet → Deployment (cheap single GET).
+		if owner.Kind == "ReplicaSet" {
+			rs, err := c.client.AppsV1().ReplicaSets(pod.Namespace).Get(ctx, owner.Name, metav1.GetOptions{})
+			if err != nil {
+				continue
+			}
+			for _, rsOwner := range rs.OwnerReferences {
+				ts := rs.CreationTimestamp.Time
+				if ts.IsZero() {
+					ts = pod.CreationTimestamp.Time
+				}
+				obs = append(obs, collect.NewObservation(
+					"resource.owner",
+					ref,
+					ts,
+					ownerRes,
+					map[string]any{"owner_kind": rsOwner.Kind, "owner_name": rsOwner.Name},
+					1.0,
+				))
+			}
+		}
+	}
+	return obs
+}
+
+// controllerStateObservation walks the owner chain to the top-level
+// controller and emits its state observation (deployment.state today).
+func (c *Collector) controllerStateObservation(ctx context.Context, pod *corev1.Pod, res model.ResourceRef, ref model.SourceRef) []model.Observation {
+	if len(pod.OwnerReferences) == 0 {
+		return nil
+	}
+	// Walk up: pod → RS → Deployment (max 3 hops).
+	owner := pod.OwnerReferences[0]
+	ns := pod.Namespace
+	for hops := 0; hops < 3; hops++ {
+		switch owner.Kind {
+		case "ReplicaSet":
+			rs, err := c.client.AppsV1().ReplicaSets(ns).Get(ctx, owner.Name, metav1.GetOptions{})
+			if err != nil || len(rs.OwnerReferences) == 0 {
+				return nil
+			}
+			owner = rs.OwnerReferences[0]
+		case "Deployment":
+			dep, err := c.client.AppsV1().Deployments(ns).Get(ctx, owner.Name, metav1.GetOptions{})
+			if err != nil {
+				return nil
+			}
+			depRes := model.ResourceRef{Kind: "deployment", Namespace: ns, Name: owner.Name}
+			return []model.Observation{deploymentStateObservation(dep, depRes, ref)}
+		default:
+			return nil // StatefulSet/DaemonSet/Job state lands in a later milestone
+		}
+	}
+	return nil
 }
 
 // eventsFor lists events whose involved object matches, filtered by window.

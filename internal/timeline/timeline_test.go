@@ -60,3 +60,36 @@ func TestBuildEmpty(t *testing.T) {
 		t.Fatal("empty timeline must have no anchor")
 	}
 }
+
+// A non-critical observation hours before the incident must not drag the
+// anchor back: the anchor is the earliest critical observation.
+func TestBuildAnchorIgnoresOldNonCriticalEvents(t *testing.T) {
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	evs := Build([]model.Observation{
+		mk("node.condition", base.Add(-2*time.Hour)),
+		mk("pod.state", base),
+		mk("container.terminated", base.Add(6*time.Minute)),
+	})
+	anchor, ok := Anchor(evs)
+	if !ok {
+		t.Fatal("no anchor")
+	}
+	if !anchor.Equal(base) {
+		t.Fatalf("anchor = %v, want %v (old node condition must not shift it)", anchor, base)
+	}
+}
+
+// Zero-timestamp observations are data-quality noise: they must be skipped,
+// not anchored on.
+func TestBuildSkipsZeroTimestamp(t *testing.T) {
+	base := time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC)
+	zero := mk("pod.state", time.Time{})
+	evs := Build([]model.Observation{zero, mk("pod.state", base)})
+	if len(evs) != 1 {
+		t.Fatalf("events = %d, want 1 (zero-timestamp skipped)", len(evs))
+	}
+	anchor, ok := Anchor(evs)
+	if !ok || !anchor.Equal(base) {
+		t.Fatalf("anchor = %v, %v; want %v", anchor, ok, base)
+	}
+}
