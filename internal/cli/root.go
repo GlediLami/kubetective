@@ -32,6 +32,7 @@ import (
 	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
 	promcollect "github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
 	"github.com/kubedoctor/kubedoctor/internal/engine"
+	"github.com/kubedoctor/kubedoctor/internal/llm"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/internal/record"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
@@ -122,6 +123,10 @@ func newInvestigateCmd() *cobra.Command {
 		context       string
 		prometheusURL string
 		gitRepo       string
+		llmEnabled    bool
+		llmModel      string
+		llmBaseURL    string
+		llmAPIKey     string
 	)
 	cmd := &cobra.Command{
 		Use:   "investigate <resource>",
@@ -178,7 +183,39 @@ func newInvestigateCmd() *cobra.Command {
 			if format == "json" {
 				return renderJSON(res)
 			}
-			return renderText(res)
+			// Optional AI synthesis: digest-only, validated, never
+			// authoritative — the engine's verdicts stand alone.
+			var explanation *llm.Explanation
+			if llmEnabled {
+				model := llmModel
+				if model == "" {
+					model = os.Getenv("KUBEDOCTOR_LLM_MODEL")
+				}
+				base := llmBaseURL
+				if base == "" {
+					base = os.Getenv("KUBEDOCTOR_LLM_BASE_URL")
+				}
+				if base == "" {
+					base = "https://api.openai.com/v1"
+				}
+				key := llmAPIKey
+				if key == "" {
+					key = os.Getenv("KUBEDOCTOR_LLM_API_KEY")
+				}
+				if model == "" {
+					return fmt.Errorf("--llm requires a model (--llm-model or KUBEDOCTOR_LLM_MODEL)")
+				}
+				digest := llm.BuildDigest(res, 3, 12, 5)
+				exp, xerr := llm.NewExplainer(llm.NewOpenAICompatible(base, model, key)).Explain(cmd.Context(), digest)
+				if xerr != nil {
+					// Graceful degradation: the deterministic verdict stands
+					// alone; the AI layer is optional.
+					fmt.Fprintln(os.Stderr, "note: AI synthesis unavailable:", xerr)
+				} else {
+					explanation = exp
+				}
+			}
+			return renderText(res, explanation)
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "kubernetes namespace")
@@ -189,6 +226,10 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
 	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBEDOCTOR_PROMETHEUS env) for metric evidence")
 	cmd.Flags().StringVar(&gitRepo, "git-repo", "", "path to the manifests git checkout (or KUBEDOCTOR_GIT_REPO env) for commit evidence")
+	cmd.Flags().BoolVar(&llmEnabled, "llm", false, "enable the optional AI synthesis layer (digest-only, never authoritative)")
+	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model name (or KUBEDOCTOR_LLM_MODEL env)")
+	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "OpenAI-compatible API base URL (or KUBEDOCTOR_LLM_BASE_URL env; default https://api.openai.com/v1)")
+	cmd.Flags().StringVar(&llmAPIKey, "llm-api-key", "", "API key (or KUBEDOCTOR_LLM_API_KEY env; not needed for local servers)")
 	return cmd
 }
 
@@ -217,7 +258,7 @@ same result.`,
 				return err
 			}
 			res.Meta.RecordID = args[0]
-			return renderText(res)
+			return renderText(res, nil)
 		},
 	}
 }

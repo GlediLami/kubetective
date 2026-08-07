@@ -1,13 +1,14 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.4 — complete.** Git collector (commits touching target
-> manifests via go-git), GitOps collector (Flux Kustomization/HelmRelease +
-> ArgoCD Application via dynamic client, silent when CRDs are absent),
-> config-regression analyzer (commit/recency/GitOps-drift + symptom mechanism
-> — the "who changed it and why" hypothesis), risk-leveled read-only
-> recommendations, 13-scenario benchmark (calibration: 12 ground-truth
-> points, accuracy 100%). Next: v0.5 LLM explainer, v0.6 REST/MCP + approved
-> actions. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
+> **Status: v0.5 — complete.** LLM explainer: OpenAI-compatible adapters
+> (OpenAI/Ollama/vLLM/llama.cpp), redacted structured digest (logs, secrets,
+> and payload values never reach the model), constraint prompt (engine
+> verdicts authoritative, no causation claims, no actions), validated strict
+> JSON output rendered as clearly-labeled "AI SYNTHESIS", graceful
+> degradation when the model is unreachable. Plus: Git collector (go-git),
+> GitOps collector (Flux + ArgoCD), config-regression analyzer, risk-leveled
+> recommendations, 13-scenario benchmark (calibration accuracy 100%). Next:
+> v0.6 REST/MCP + approved actions. Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
 (`pod/checkout-7f84c9`, `deployment/checkout`, `--since=30m`) it collects facts, builds a
@@ -59,7 +60,7 @@ recorded incident you can replay (`kubedoctor replay <incident-id>`).
 | v0.2 | ✅ Evidence graph, scoring + calibration, change detector, Prometheus collector, scheduling/node-pressure/probe analyzers, 8 scenarios |
 | v0.3 | ✅ Adaptive collection (NeedsEvidence loop), rule-based hypothesis engine, pvc/service/hpa analyzers, 11 scenarios |
 | v0.4 | ✅ Git + Flux/ArgoCD collectors, config-regression analyzer, risk-leveled recommendations |
-| v0.5 | LLM explainer (digest-only, local-LLM support) |
+| v0.5 | ✅ LLM explainer: digest-only (redacted), OpenAI-compatible providers, constraint prompt, validated JSON output, AI SYNTHESIS rendering |
 | v0.6+ | REST, MCP server, preview + approved actions, incident memory |
 
 Full roadmap: [`docs/DESIGN.md`](docs/DESIGN.md#21-roadmap).

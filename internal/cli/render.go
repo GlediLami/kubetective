@@ -7,14 +7,16 @@ import (
 	"time"
 
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
+	"github.com/kubedoctor/kubedoctor/internal/llm"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
 // renderText renders the narrow, human-visible slice of the result:
-// header card → ROOT CAUSE → EVIDENCE → TIMELINE → GAPS.
+// header card → ROOT CAUSE → EVIDENCE → TIMELINE → WHAT CHANGED →
+// RELATIONSHIPS → GAPS → RECOMMENDATION → AI SYNTHESIS (optional).
 // "Collect more than you show" (docs/DESIGN.md §9/§5.2).
-func renderText(res *api.InvestigationResult) error {
+func renderText(res *api.InvestigationResult, explanation *llm.Explanation) error {
 	w := os.Stdout
 	inc := res.Incident
 
@@ -107,6 +109,24 @@ func renderText(res *api.InvestigationResult) error {
 		for _, r := range res.Recommendations {
 			fmt.Fprintf(w, "  %s [%s] — %s\n", r.Action, r.Risk, r.Reason)
 		}
+	}
+
+	// AI synthesis: clearly separate from the deterministic verdict, and the
+	// model's own confidence is never confused with the engine's.
+	if explanation != nil {
+		fmt.Fprintln(w, "\nAI SYNTHESIS (non-authoritative)")
+		fmt.Fprintf(w, "  Summary: %s\n", explanation.Summary)
+		fmt.Fprintf(w, "  %s\n", explanation.Explanation)
+		if explanation.Uncertainty != "" {
+			fmt.Fprintf(w, "  Uncertainty: %s\n", explanation.Uncertainty)
+		}
+		if len(explanation.FollowUps) > 0 {
+			fmt.Fprintf(w, "  Follow-ups: %s\n", stringsJoin(explanation.FollowUps, "; "))
+		}
+		if explanation.RecommendedAction != nil {
+			fmt.Fprintf(w, "  Suggested action: %s\n", *explanation.RecommendedAction)
+		}
+		fmt.Fprintf(w, "  Model confidence: %.0f%% (engine confidence above is authoritative)\n", explanation.ConfidenceInOwnAnswer*100)
 	}
 
 	fmt.Fprintf(w, "\n%d observations · %d sources · %s",
