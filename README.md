@@ -13,7 +13,7 @@ Docs: [gledilami.github.io/kubetective](https://gledilami.github.io/kubetective/
 
 ![demo](demo.gif)
 
-*The demo above is a replay of a recorded incident — no cluster, no credentials
+*The demo above is a replay of a recorded incident
 required.*
 
 ## What it finds in 30 seconds
