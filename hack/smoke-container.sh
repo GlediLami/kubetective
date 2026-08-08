@@ -134,10 +134,25 @@ run_job kt-doctor doctor
 kubectl wait --for=condition=complete job/kt-doctor --namespace "$NS" --timeout=180s
 kubectl logs job/kt-doctor --namespace "$NS"
 
-echo "== job: investigate deployment/crashy"
-run_job kt-investigate investigate deployment/crashy --namespace "$WORK_NS" --since 10m --format json
-kubectl wait --for=condition=complete job/kt-investigate --namespace "$NS" --timeout=300s
-kubectl logs job/kt-investigate --namespace "$NS" > /tmp/kt-investigate.out
+echo "== job: investigate deployment/crashy (until crashloop hypothesis)"
+# Same oscillation as the pod target below: the deployment investigation
+# must capture the crash-loop state to report the crashloop hypothesis.
+DEPLOY_OK=0
+for attempt in $(seq 1 5); do
+  run_job "kt-investigate-${attempt}" investigate deployment/crashy \
+    --namespace "$WORK_NS" --since 10m --format json
+  kubectl wait --for=condition=complete "job/kt-investigate-${attempt}" --namespace "$NS" --timeout=300s
+  kubectl logs "job/kt-investigate-${attempt}" --namespace "$NS" > /tmp/kt-investigate.out
+  if grep -q '"crashloop"' /tmp/kt-investigate.out; then
+    echo "  attempt ${attempt}: deployment record carries the crashloop hypothesis"
+    DEPLOY_OK=1
+    break
+  fi
+  echo "  attempt ${attempt}: no crashloop in deployment record, retrying in 15s"
+  kubectl delete job "kt-investigate-${attempt}" --namespace "$NS" >/dev/null 2>&1 || true
+  sleep 15
+done
+[ "$DEPLOY_OK" = 1 ] || { echo "SMOKE FAIL: deployment investigation found no crashloop hypothesis (5 tries)" >&2; exit 1; }
 
 echo "== job: investigate pod/$CRASHY_POD (actions chain target, retried into the crash state)"
 # A crash-looping pod oscillates between Running and CrashLoopBackOff; the
