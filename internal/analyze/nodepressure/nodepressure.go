@@ -1,6 +1,6 @@
 // Package nodepressure implements the node-pressure analyzer: it activates on
 // node.condition observations (MemoryPressure/DiskPressure/PIDPressure) and
-// builds the "node under pressure" hypothesis — the classic root cause that
+// builds the "node under pressure" hypothesis - the classic root cause that
 // sits above per-pod symptoms.
 package nodepressure
 

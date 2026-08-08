@@ -78,7 +78,7 @@ func renderText(res *api.InvestigationResult, explanation *llm.Explanation) erro
 				break
 			}
 			shown++
-			fmt.Fprintf(w, "  %d. %s — %s (relevance %.0f%%)\n",
+			fmt.Fprintf(w, "  %d. %s - %s (relevance %.0f%%)\n",
 				shown, ch.Resource.String(), ch.Description, ch.Relevance*100)
 		}
 	}
@@ -109,7 +109,7 @@ func renderText(res *api.InvestigationResult, explanation *llm.Explanation) erro
 	if len(res.Recommendations) > 0 {
 		fmt.Fprintln(w, "\nRECOMMENDATION")
 		for _, r := range res.Recommendations {
-			fmt.Fprintf(w, "  %s [%s] — %s\n", r.Action, r.Risk, r.Reason)
+			fmt.Fprintf(w, "  %s [%s] - %s\n", r.Action, r.Risk, r.Reason)
 		}
 	}
 
@@ -169,12 +169,12 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 	fmt.Fprintf(w, "\n%d/%d scenarios passed\n", passed, total)
 
 	if c := suite.Calibration; c != nil {
-		fmt.Fprintf(w, "calibration: %d ground-truth points, accuracy %.0f%% — ECE %.1f%% @T=26 → ECE %.1f%% @T=%.1f\n",
+		fmt.Fprintf(w, "calibration: %d ground-truth points, accuracy %.0f%% - ECE %.1f%% @T=26 → ECE %.1f%% @T=%.1f\n",
 			c.Points, c.Accuracy*100, c.DefaultECE*100, c.ECE*100, c.Temperature)
 		if l := suite.LOO; l != nil {
 			adopt := "not adopted"
 			if l.Adopt && c.Points >= 10 {
-				adopt = "adopted — persisted to " + config.Path()
+				adopt = "adopted - persisted to " + config.Path()
 				if err := config.Save(config.Config{Temperature: l.Temperature}); err == nil {
 					score.SetTemperature(l.Temperature)
 				}
@@ -185,10 +185,10 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 		// Calibration rule: ECE > 0.1 → displayed confidence is dampened
 		// toward the conservative 50% default.
 		if c.DefaultECE > 0.10 {
-			fmt.Fprintf(w, "  warning: ECE %.1f%% exceeds 10%% — displayed confidence dampened toward 50%% (score.Dampen)\n", c.DefaultECE*100)
+			fmt.Fprintf(w, "  warning: ECE %.1f%% exceeds 10%% - displayed confidence dampened toward 50%% (score.Dampen)\n", c.DefaultECE*100)
 		}
 		if c.Points < 10 {
-			fmt.Fprintf(w, "  (advisory: <10 points — the fitted temperature is not yet trustworthy; adoption is skipped below 10 points)\n")
+			fmt.Fprintf(w, "  (advisory: <10 points - the fitted temperature is not yet trustworthy; adoption is skipped below 10 points)\n")
 		}
 	}
 
@@ -197,7 +197,7 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 	}
 
 	// Calibration hardening: adopt a leave-one-out-validated temperature
-	//, persisted for every future invocation — but only
+	//, persisted for every future invocation - but only
 	// when the gate passed, so a failing suite never mutates engine config.
 	if c := suite.Calibration; c != nil && suite.LOO != nil && suite.LOO.Adopt && c.Points >= 10 {
 		if err := config.Save(config.Config{Temperature: suite.LOO.Temperature}); err == nil {

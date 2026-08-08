@@ -1,5 +1,5 @@
 // Package dns implements the DNS-failure analyzer: workloads that crash or
-// hang because they cannot resolve names — most commonly because coreDNS /
+// hang because they cannot resolve names - most commonly because coreDNS /
 // kube-dns is down or the sandbox cannot be created (v0.7: the "why" for
 // crashloops whose events smell of DNS).
 package dns
@@ -42,13 +42,13 @@ func New() *Analyzer { return &Analyzer{} }
 func (a *Analyzer) ID() string   { return "dns" }
 func (a *Analyzer) Name() string { return "DNS Failures" }
 
-// NeedsEvidence: no adaptive requests — the collector always fetches
+// NeedsEvidence: no adaptive requests - the collector always fetches
 // coreDNS availability and events.
 func (a *Analyzer) NeedsEvidence(_ model.Hypothesis) []analyze.EvidenceRequest { return nil }
 
 // Explain renders the finding without an LLM.
 func (a *Analyzer) Explain(f model.Finding) string {
-	return fmt.Sprintf("%s — %s", f.Title, f.Description)
+	return fmt.Sprintf("%s - %s", f.Title, f.Description)
 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
@@ -57,7 +57,7 @@ func (a *Analyzer) Supports(o model.Observation) bool {
 			return true
 		}
 	}
-	// Symptom observations (crash loop) — the analyzer needs them to confirm
+	// Symptom observations (crash loop) - the analyzer needs them to confirm
 	// the workload actually failed.
 	if o.Kind == "container.waiting" {
 		return o.Payload["reason"] == "CrashLoopBackOff"

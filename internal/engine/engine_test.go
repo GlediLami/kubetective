@@ -180,7 +180,7 @@ func TestInvestigatePodTarget(t *testing.T) {
 		t.Errorf("evidence lines = %d, want ≥ 3 (mechanism + limit + temporal)", len(top.Score.Lines))
 	}
 
-	// Timeline: non-empty, sorted, and anchored — one event at offset 0 is
+	// Timeline: non-empty, sorted, and anchored - one event at offset 0 is
 	// the incident onset (earliest critical observation); earlier facts (node
 	// conditions from before the window's incidents) carry negative offsets.
 	if len(res.Timeline) == 0 {
@@ -217,7 +217,7 @@ func TestInvestigatePodTarget(t *testing.T) {
 	// What changed: the owning deployment (created 14m before the incident)
 	// must be surfaced as a change with explainable factors. The pod's own
 	// creation is temporally closest for a pod target, so the top entry may
-	// be either — the deployment's presence is the meaningful assertion.
+	// be either - the deployment's presence is the meaningful assertion.
 	if len(res.Changes) == 0 {
 		t.Fatal("no changes detected")
 	}

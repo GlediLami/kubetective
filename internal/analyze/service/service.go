@@ -1,6 +1,6 @@
 // Package service implements the service-endpoints analyzer: it activates on
 // service.state observations and builds the "service has no ready endpoints"
-// hypothesis — the 503 / selector-mismatch root cause.
+// hypothesis - the 503 / selector-mismatch root cause.
 package service
 
 import (
@@ -75,7 +75,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		ready, _ := analyze.PayloadInt64(s.obs.Payload, "ready_endpoints")
 		total, _ := analyze.PayloadInt64(s.obs.Payload, "total_endpoints")
 		if ready > 0 {
-			continue // endpoints exist — nothing to diagnose
+			continue // endpoints exist - nothing to diagnose
 		}
 		selector, _ := analyze.PayloadStringMap(s.obs.Payload, "selector")
 
@@ -83,7 +83,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		title := "Service has no ready endpoints"
 		if len(selector) > 0 && s.readyPods > 0 {
 			severity = model.SevHigh
-			title = "Service selector mismatch — ready pods not in endpoints"
+			title = "Service selector mismatch - ready pods not in endpoints"
 		}
 
 		findings = append(findings, model.Finding{

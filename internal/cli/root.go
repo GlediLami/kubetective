@@ -80,7 +80,7 @@ func isKnownCommand(arg string) bool {
 func newRoot() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "kubetective",
-		Short: "KubeTective — Kubernetes incident investigation engine",
+		Short: "KubeTective - Kubernetes incident investigation engine",
 		Long: `KubeTective investigates Kubernetes incidents: it collects facts, builds a
 timeline and evidence graph, generates hypotheses, and renders an
 evidence-backed explanation. Deterministic first, AI second.
@@ -205,7 +205,7 @@ func newInvestigateCmd() *cobra.Command {
 				return renderJSON(res)
 			}
 			// Optional AI synthesis: digest-only, validated, never
-			// authoritative — the engine's verdicts stand alone.
+			// authoritative - the engine's verdicts stand alone.
 			var explanation *llm.Explanation
 			if llmEnabled {
 				model := llmModel
@@ -291,7 +291,7 @@ func newBenchmarkCmd() *cobra.Command {
 		Short: "Run the scenario benchmark gate",
 		Long: `Replays every scenario in scenarios/ through the engine and asserts the
 ground truth (top hypothesis category, minimum score, expected findings).
-Exit code 1 if any scenario fails — this is the analyzer contribution gate.`,
+Exit code 1 if any scenario fails - this is the analyzer contribution gate.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
@@ -350,7 +350,7 @@ func parseResourceRef(raw, namespace string) (model.ResourceRef, error) {
 		ref.Kind, ref.Name = "pod", raw
 	}
 	if ref.Kind == "" || ref.Name == "" {
-		return model.ResourceRef{}, fmt.Errorf("invalid target %q — use kind/name (e.g. deployment/checkout)", raw)
+		return model.ResourceRef{}, fmt.Errorf("invalid target %q - use kind/name (e.g. deployment/checkout)", raw)
 	}
 	return ref, nil
 }

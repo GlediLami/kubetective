@@ -1,6 +1,6 @@
 // Package timeline merges observations into a deduplicated, time-sorted,
 // anchored timeline. The anchor is the earliest "critical" observation
-// (terminations, waiting states) — everything is rendered relative to it
+// (terminations, waiting states) - everything is rendered relative to it
 // (t-14m, t+3m) so replays read identically across timezones
 //.
 package timeline
@@ -45,7 +45,7 @@ func Build(observations []model.Observation) []model.TimelineEvent {
 
 	// Anchor: the earliest critical observation (termination/waiting/pod
 	// state). A non-critical event before it (e.g. a node condition from
-	// hours ago) must not drag the anchor back — fall back to the earliest
+	// hours ago) must not drag the anchor back - fall back to the earliest
 	// event only when no critical observation exists.
 	var anchor time.Time
 	for _, ev := range events {

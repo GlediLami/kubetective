@@ -91,7 +91,7 @@ func TestCollectPodNormalizesObservations(t *testing.T) {
 	})
 
 	c := New(client)
-	// Explicit window covering the fake data (14:00–14:10 UTC) — not the real clock.
+	// Explicit window covering the fake data (14:00–14:10 UTC) - not the real clock.
 	obs, refs, err := c.Collect(context.Background(), &collect.ScopePlan{
 		Targets: []model.ResourceRef{{Kind: "pod", Namespace: ns, Name: name}},
 		Window: api.Window{
@@ -333,7 +333,7 @@ func TestCollectCoreDNSAvailability(t *testing.T) {
 func TestCollectSkipsMissingCoreDNS(t *testing.T) {
 	ns := "prod"
 	pod := fakePod(t, ns, "checkout-7f84c9")
-	// No kube-system deployments in the fake — the collector must not fail.
+	// No kube-system deployments in the fake - the collector must not fail.
 	client := fake.NewSimpleClientset(pod)
 	c := New(client)
 	_, _, err := c.Collect(context.Background(), &collect.ScopePlan{

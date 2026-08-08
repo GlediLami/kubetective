@@ -1,6 +1,6 @@
 // Package hpa implements the HorizontalPodAutoscaler analyzer: it activates
 // on hpa.state observations and flags when the workload is pinned at
-// maxReplicas — the capacity-ceiling context that amplifies per-pod failures.
+// maxReplicas - the capacity-ceiling context that amplifies per-pod failures.
 package hpa
 
 import (
@@ -52,7 +52,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			Analyzer:    a.ID(),
 			Severity:    model.SevWarning,
 			Title:       "HPA at max replicas",
-			Description: fmt.Sprintf("workload %s pinned at %d replicas (desired %d) — scale-out is exhausted", workload, current, desired),
+			Description: fmt.Sprintf("workload %s pinned at %d replicas (desired %d) - scale-out is exhausted", workload, current, desired),
 			Timestamp:   o.Timestamp,
 		})
 

@@ -2,14 +2,14 @@
 // and merges analyzer-emitted candidates, reranks them, and applies
 // deterministic status rules.
 //
-// The engine never fabricates hypotheses or evidence — it consolidates what
+// The engine never fabricates hypotheses or evidence - it consolidates what
 // analyzers produced. Status rules:
 //
 //   - same ID → merge evidence lists (an analyzer ran twice across adaptive
 //     rounds);
 //   - on the same resource, a hypothesis outranked by ≥ outrankGap is marked
 //     RuledOut (deterministic, explainable: the breakdown shows the gap);
-//   - near ties stay Candidate ("multiple plausible causes" — the CLI says so).
+//   - near ties stay Candidate ("multiple plausible causes" - the CLI says so).
 package hypothesis
 
 import (

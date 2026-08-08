@@ -110,7 +110,7 @@ func TestOOMAnalyzerInactiveWithoutOOM(t *testing.T) {
 }
 
 // TestOOMAnalyzerUsesKubeletEvents: a crash-looping pod loses its terminated
-// state to CrashLoopBackOff — the kubelet's OOMKilling events are the
+// state to CrashLoopBackOff - the kubelet's OOMKilling events are the
 // historical record and must activate the analyzer.
 func TestOOMAnalyzerUsesKubeletEvents(t *testing.T) {
 	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
@@ -140,7 +140,7 @@ func TestOOMAnalyzerUsesKubeletEvents(t *testing.T) {
 }
 
 // TestOOMAnalyzerUsesPrometheusMetrics: when a Prometheus collector ran, the
-// memory series corroborate the mechanism — usage peaked at/above the limit
+// memory series corroborate the mechanism - usage peaked at/above the limit
 // and grew within the window.
 func TestOOMAnalyzerUsesPrometheusMetrics(t *testing.T) {
 	res := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "checkout-7f84c9"}
@@ -217,7 +217,7 @@ func TestOOMAnalyzerAfterJSONRoundTrip(t *testing.T) {
 		}
 	}
 	if !hasLimit {
-		t.Error("memory-limit evidence lost after JSON round trip — payload type assertions must be tolerant")
+		t.Error("memory-limit evidence lost after JSON round trip - payload type assertions must be tolerant")
 	}
 	if h.Score.Score < 0.8 {
 		t.Errorf("score = %.3f, want ≥ 0.8 with limit evidence present", h.Score.Score)

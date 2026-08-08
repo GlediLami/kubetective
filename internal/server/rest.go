@@ -1,4 +1,4 @@
-// Package server exposes KubeTective over HTTP (REST) and MCP (stdio) —
+// Package server exposes KubeTective over HTTP (REST) and MCP (stdio) -
 // v0.6 roadmap: "REST API + server mode, MCP server (thin wrapper)".
 package server
 
@@ -64,7 +64,7 @@ func (s *REST) handleInvestigate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	// Record every investigation (replay substrate) —
+	// Record every investigation (replay substrate) -
 	// same behavior as the CLI.
 	if s.Store != nil {
 		inc := record.BuildIncident(engine.Version, req, res)

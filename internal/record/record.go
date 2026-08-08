@@ -1,5 +1,5 @@
 // Package record persists investigations as append-only JSONL incident
-// records (one Observation per line) — the replay and benchmark substrate.
+// records (one Observation per line) - the replay and benchmark substrate.
 // A replay runs the pipeline over recorded observations instead of live
 // collectors, so investigations are reproducible and debuggable
 //.

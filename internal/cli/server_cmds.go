@@ -64,7 +64,7 @@ func newMCPCmd() *cobra.Command {
 		Short: "Run the MCP server over stdio (Model Context Protocol)",
 		Long: `Runs a minimal MCP server (JSON-RPC 2.0 over stdio) exposing
 read-only tools: investigate, replay, list_incidents, read_incident,
-action_preview. Remediation stays human-gated in the CLI — there is
+action_preview. Remediation stays human-gated in the CLI - there is
 deliberately no apply tool.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "")
@@ -144,7 +144,7 @@ func newActionCmd() *cobra.Command {
 		Long: `Deterministic, evidence-linked actions for a recorded incident
 (phases 3-4 of the remediation model).
 
-Default: PREVIEW — read-only, contacts no cluster, prints the diff-style
+Default: PREVIEW - read-only, contacts no cluster, prints the diff-style
 plan (kubectl equivalents, risk, evidence).
 
 Apply:  --apply <action-id> --yes
@@ -186,7 +186,7 @@ Apply:  --apply <action-id> --yes
 				}
 			}
 			if chosen == nil {
-				return fmt.Errorf("unknown action %q — preview lists the available action ids", applyID)
+				return fmt.Errorf("unknown action %q - preview lists the available action ids", applyID)
 			}
 
 			kc, err := buildLiveClient(kubeconfig, kubeCtx)
@@ -229,10 +229,10 @@ func buildLiveClient(kubeconfig, context string) (kubernetes.Interface, error) {
 
 func renderActionPreview(acts []action.Action) error {
 	if len(acts) == 0 {
-		fmt.Println("no remediation actions — the investigation found nothing actionable")
+		fmt.Println("no remediation actions - the investigation found nothing actionable")
 		return nil
 	}
-	fmt.Println("ACTION PREVIEW (read-only — nothing has been applied)")
+	fmt.Println("ACTION PREVIEW (read-only - nothing has been applied)")
 	for _, a := range acts {
 		fmt.Printf("  %s  %s\n", a.ID, a.Type)
 		fmt.Printf("    target:  %s\n", a.Target)

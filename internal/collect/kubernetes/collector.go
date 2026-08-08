@@ -70,7 +70,7 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 	for _, name := range []string{"coredns", "kube-dns"} {
 		dep, err := c.client.AppsV1().Deployments("kube-system").Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
-			continue // not found or no RBAC — the DNS analyzer reports a gap-free lower score
+			continue // not found or no RBAC - the DNS analyzer reports a gap-free lower score
 		}
 		res := model.ResourceRef{Kind: "deployment", Namespace: "kube-system", Name: dep.Name}
 		ref := model.SourceRef{System: "k8s", Query: "GET deployments/" + name}
@@ -78,7 +78,7 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 	}
 	// Dedup at the boundary: overlapping scope expansion (e.g. deployment
 	// state fetched both directly and via the pod owner chain) emits the same
-	// content-hashed observation twice — collapse before handing over.
+	// content-hashed observation twice - collapse before handing over.
 	return dedupObservations(obs), refs, nil
 }
 

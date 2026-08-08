@@ -39,7 +39,7 @@ func (a *Analyzer) Supports(o model.Observation) bool {
 func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]model.Finding, []model.Hypothesis, []model.Evidence, error) {
 	// Group terminations by pod resource. A termination is either the current
 	// container state (container.terminated) or the historical record left by
-	// the kubelet (event.recorded OOMKilling) — crash-looping pods lose their
+	// the kubelet (event.recorded OOMKilling) - crash-looping pods lose their
 	// current terminated state to CrashLoopBackOff, so the events are the
 	// authoritative history.
 	type crash struct {
@@ -123,7 +123,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			claim += fmt.Sprintf(" (memory limit %s)", g.limit)
 		}
 		if restarts > 1 {
-			claim += fmt.Sprintf(" — %d restart(s)", restarts)
+			claim += fmt.Sprintf(" - %d restart(s)", restarts)
 		}
 		if n > 0 && g.fromEvents {
 			claim += " (incl. kubelet OOMKilling events)"

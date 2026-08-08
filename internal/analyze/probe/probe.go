@@ -1,6 +1,6 @@
 // Package probe implements the probe-failure analyzer: it activates on
 // Unhealthy events (liveness/readiness probe failures) and builds the
-// "probe failing" hypothesis — the most common cause of unnecessary restarts
+// "probe failing" hypothesis - the most common cause of unnecessary restarts
 // and traffic loss.
 package probe
 

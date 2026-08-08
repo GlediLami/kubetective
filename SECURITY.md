@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report security issues **privately** — do not open a public issue.
+Please report security issues **privately** - do not open a public issue.
 
 Email the maintainers at the address listed in the repository description /
 maintainer profile, or use GitHub's private vulnerability reporting
@@ -28,7 +28,7 @@ KubeTective is designed to be safe to run in production clusters. The invariants
 - **The collector boundary.** Raw data (log lines, annotations, secrets)
   never crosses into the analysis layer; analyzers only see normalized
   observations.
-- **The LLM boundary.** The optional LLM receives only a redacted digest —
+- **The LLM boundary.** The optional LLM receives only a redacted digest -
   no logs, no payload values, no kubeconfig, no secrets. Its output is
   validated strict JSON and can never change scores, assert causation, or
   propose actions. This boundary is regression-tested.

@@ -124,7 +124,7 @@ func TestApplyRollback(t *testing.T) {
 		t.Errorf("template image = %q, want app:v41 (previous revision)", got.Spec.Template.Spec.Containers[0].Image)
 	}
 	// Regression: the rollback must REPLACE the template wholesale, not merge
-	// it — a stale annotation from the current revision must not survive.
+	// it - a stale annotation from the current revision must not survive.
 	if _, has := got.Spec.Template.Annotations["marker"]; has {
 		t.Errorf("template annotations = %v: stale 'marker' survived the rollback", got.Spec.Template.Annotations)
 	}

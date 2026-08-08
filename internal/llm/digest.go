@@ -118,7 +118,7 @@ func BuildDigest(res *api.InvestigationResult, maxHypotheses, maxTimeline, maxCh
 }
 
 // reasonOf extracts a short, safe reason string from an observation payload
-// (phase/reason only — never arbitrary payload fields).
+// (phase/reason only - never arbitrary payload fields).
 func reasonOf(o model.Observation) string {
 	if r, ok := o.Payload["reason"].(string); ok && r != "" {
 		return sanitize(r, 60)
@@ -131,7 +131,7 @@ func reasonOf(o model.Observation) string {
 
 // sanitize makes strings digest-safe: valid UTF-8, no control characters
 // (newlines become spaces), capped length. This is the injection-hardening
-// boundary — everything the LLM sees passes through here.
+// boundary - everything the LLM sees passes through here.
 func sanitize(s string, maxRunes int) string {
 	s = strings.ToValidUTF8(s, "�")
 	var b strings.Builder

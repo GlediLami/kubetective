@@ -56,7 +56,7 @@ func TestGitCollectorFindsMatchingCommits(t *testing.T) {
 
 	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "api-abc"}
 	// Prior carries the owner chain: the pod api-abc is owned by deployment
-	// api — manifests name the workload, not the pod.
+	// api - manifests name the workload, not the pod.
 	obs, refs, err := c.Collect(context.Background(), &collect.ScopePlan{
 		Targets: []model.ResourceRef{pod},
 		Prior: []model.Observation{{

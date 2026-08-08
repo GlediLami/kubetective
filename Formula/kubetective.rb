@@ -1,8 +1,9 @@
 # KubeTective Homebrew formula.
 #
-# Published via the main repo as a tap:
-#   brew tap gledilami/kubetective https://github.com/GlediLami/kubetective.git
+# Install with the one-liner:
 #   brew install gledilami/kubetective/kubetective
+# Homebrew auto-taps github.com/GlediLami/homebrew-kubetective, which carries
+# a copy of this file. Keep both in sync at release time (CONTRIBUTING.md).
 #
 # The url/sha256 point at the tagged release tarball (kept in sync by
 # hack/update-formula.sh — see CONTRIBUTING.md).

@@ -5,7 +5,7 @@
 //
 // Edge discipline: structural edges (OWNS/RUNS_ON) come from API relationships
 // via resource.owner / pod.state observations; CHANGED_BEFORE comes from the
-// change detector. Causality (CAUSED_BY) is never emitted here — only
+// change detector. Causality (CAUSED_BY) is never emitted here - only
 // analyzers that pass the causality discipline may add it.
 package graph
 
@@ -132,7 +132,7 @@ func Build(observations []model.Observation, changes []model.Change, onset *mode
 	}
 
 	// TEMPORALLY_CORRELATED edges: metric movement near a change (weak,
-	// explicitly non-causal — the edge kind says so.
+	// explicitly non-causal - the edge kind says so.
 	for _, ch := range changes {
 		for _, o := range observations {
 			if o.Kind != "metric.series" {

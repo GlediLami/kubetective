@@ -60,7 +60,7 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 		return nil, ErrNoCollectors
 	}
 
-	// Stage 1 — scope: the target itself; owner-chain expansion happens
+	// Stage 1 - scope: the target itself; owner-chain expansion happens
 	// inside the Kubernetes collector.
 	scopePlan := &collect.ScopePlan{
 		Targets:     []model.ResourceRef{req.Target},
@@ -69,17 +69,17 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 		MaxLogLines: req.Scope.MaxLogLines,
 	}
 
-	// Stage 2 — initial collection.
+	// Stage 2 - initial collection.
 	observations, gaps, sources := e.collectAll(ctx, scopePlan)
 	observations = dedup(observations)
 
-	// Stage 3–5 — build + analyze + score.
+	// Stage 3–5 - build + analyze + score.
 	events, changes, g := e.buildStage(observations, req)
 	findings, hypotheses, evidence, agaps := e.analyzeAll(ctx, observations, g, changes)
 	gaps = append(gaps, agaps...)
 	hypotheses = hypothesis.Merge(hypotheses)
 
-	// Stage 6 — adaptive rounds: analyzers ask for targeted evidence
+	// Stage 6 - adaptive rounds: analyzers ask for targeted evidence
 	// (NeedsEvidence), collectors fetch it, the pipeline re-runs. Bounded.
 	for round := 1; round <= maxAdaptiveRounds; round++ {
 		requests := e.pendingRequests(hypotheses)

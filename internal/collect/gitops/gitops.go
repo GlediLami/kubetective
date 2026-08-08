@@ -1,7 +1,7 @@
 // Package gitops implements the GitOps collector: it reads Flux
 // Kustomization/HelmRelease and ArgoCD Application custom resources via the
 // dynamic client and normalizes their sync/reconcile state into gitops.state
-// observations — "what the GitOps controller thinks of the workload"
+// observations - "what the GitOps controller thinks of the workload"
 //.
 //
 // The collector is failure-tolerant: missing CRDs or missing permissions
@@ -82,7 +82,7 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 	return obs, refs, nil
 }
 
-// missingCRD reports whether a list error means "the CRD is not installed" —
+// missingCRD reports whether a list error means "the CRD is not installed" -
 // a normal, silent condition for clusters without Flux/ArgoCD.
 func missingCRD(err error) bool {
 	if err == nil {

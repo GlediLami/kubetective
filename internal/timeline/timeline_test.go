@@ -34,7 +34,7 @@ func TestBuildSortsDedupsAndAnchors(t *testing.T) {
 		}
 	}
 	// Anchor = earliest critical observation (pod.state at t+1m is critical;
-	// container.terminated at t+6m; the earliest critical is pod.state t+1m —
+	// container.terminated at t+6m; the earliest critical is pod.state t+1m -
 	// wait: pod.state is critical too and earlier than terminated → anchor).
 	// The earliest observation overall is pod.state t+1m, which is critical.
 	anchor, ok := Anchor(evs)

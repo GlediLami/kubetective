@@ -8,7 +8,7 @@
 //   - apply requires an explicit human approval flag at the CLI layer;
 //   - every apply appends an audit record (user, timestamp, resource,
 //     arguments, evidence, risk, approval, result) to the incident record;
-//   - the planner is read-only — Plan() never touches the cluster.
+//   - the planner is read-only - Plan() never touches the cluster.
 package action
 
 import (
@@ -73,7 +73,7 @@ func Plan(res *api.InvestigationResult) []Action {
 				Type:        Rollback,
 				Target:      ch.Resource,
 				Args:        map[string]string{"revision": "previous"},
-				Reason:      fmt.Sprintf("%s after a change — reverting the configuration that preceded the failure", top.Claim),
+				Reason:      fmt.Sprintf("%s after a change - reverting the configuration that preceded the failure", top.Claim),
 				Risk:        riskFor(top.Category),
 				EvidenceIDs: evidenceIDs(top),
 				DryRun:      fmt.Sprintf("kubectl rollout undo deployment/%s --dry-run=client", ch.Resource.Name),
@@ -91,7 +91,7 @@ func Plan(res *api.InvestigationResult) []Action {
 			act := Action{
 				Type:        RestartPod,
 				Target:      res.Incident.Target,
-				Reason:      fmt.Sprintf("pod in state %s — a restart is the standard first recovery step", res.Incident.Status),
+				Reason:      fmt.Sprintf("pod in state %s - a restart is the standard first recovery step", res.Incident.Status),
 				Risk:        model.RiskLow,
 				EvidenceIDs: evidenceIDs(top),
 				DryRun:      fmt.Sprintf("kubectl delete pod/%s --dry-run=client", res.Incident.Target.Name),

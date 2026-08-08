@@ -21,7 +21,7 @@ const mcpProtocolVersion = "2024-11-05"
 // stdio.
 //
 // Tools are read-only: investigate, replay, list_incidents, read_incident,
-// action_preview. There is deliberately no apply tool — remediation stays
+// action_preview. There is deliberately no apply tool - remediation stays
 // human-gated in the CLI.
 type MCPServer struct {
 	Inv   api.Investigator
@@ -186,7 +186,7 @@ func (m *MCPServer) handleToolCall(id json.RawMessage, params json.RawMessage) (
 				return textResult(map[string]string{"error": ierr.Error()}, true)
 			}
 			return textResult(map[string]any{"actions": action.Plan(res)}, false)
-		default: // replay — via the CLI-wired Replay hook
+		default: // replay - via the CLI-wired Replay hook
 			target, terr := parseRef(inc.Meta.Target, "")
 			if terr != nil {
 				target = model.ResourceRef{Kind: "pod", Name: "scenario"}

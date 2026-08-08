@@ -155,7 +155,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		if oomOnResource[key] {
 			eOOM := model.Evidence{
 				ID:          fmt.Sprintf("crashloop.%s.oom", res.Name),
-				Claim:       "OOMKilled observed — memory exhaustion is more specific",
+				Claim:       "OOMKilled observed - memory exhaustion is more specific",
 				Contradicts: []string{},
 				Weight:      weightOOM, Strength: 1.0,
 			}

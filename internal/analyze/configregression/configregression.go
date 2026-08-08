@@ -1,6 +1,6 @@
 // Package configregression implements the config-regression analyzer: it
-// links a change — a git commit touching the workload's manifests or a
-// GitOps reconcile — to the incident onset and builds the "configuration
+// links a change - a git commit touching the workload's manifests or a
+// GitOps reconcile - to the incident onset and builds the "configuration
 // regression" hypothesis.
 //
 // This is the analyzer that answers "what changed" with "who changed it and
@@ -50,7 +50,7 @@ func (a *Analyzer) Supports(o model.Observation) bool {
 
 func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]model.Finding, []model.Hypothesis, []model.Evidence, error) {
 	// The incident onset is the timeline anchor; the engine passes the
-	// earliest event's timestamp via the graph? No — recompute from
+	// earliest event's timestamp via the graph? No - recompute from
 	// observations: the earliest critical observation.
 	onset := onsetOf(in.Observations)
 
@@ -199,7 +199,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 
 		missing := 0
 		if commit == nil {
-			missing = 1 // no git evidence — regression claim rests on weaker signals
+			missing = 1 // no git evidence - regression claim rests on weaker signals
 		}
 
 		claim := "Configuration regression: a change preceded the incident"
@@ -236,7 +236,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 	return findings, hypotheses, evidence, nil
 }
 
-// onsetOf finds the earliest failure signal (termination or waiting state) —
+// onsetOf finds the earliest failure signal (termination or waiting state) -
 // the regression's "onset" is when the workload started failing, not when it
 // was created.
 func onsetOf(obs []model.Observation) time.Time {

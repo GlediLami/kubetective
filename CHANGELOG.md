@@ -2,21 +2,21 @@
 
 All notable changes to KubeTective are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
-does **not** yet follow Semantic Versioning (0.x — API may change).
+does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ## [Unreleased]
 
 ### Added
 
-- `v0.7` — DNS-failure analyzer (coreDNS-down + DNS-event evidence, live
+- `v0.7` - DNS-failure analyzer (coreDNS-down + DNS-event evidence, live
   kube-system fetch); liveness-probe-failure scenario (suite: 15 scenarios);
   `kubetective evaluate` markdown evaluation report (per-scenario,
-  per-category accuracy, calibration, false-positive check — CI gate);
+  per-category accuracy, calibration, false-positive check - CI gate);
   calibration hardening: leave-one-out validation, confidence dampening
   (ECE > 10%), and real adoption of the validated temperature via
   `~/.kubetective/config.json`.
 
-## [0.6] — 2026-08-07
+## [0.6] - 2026-08-07
 
 ### Added
 
@@ -27,7 +27,7 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
 - Preview actions + human approval (`kubetective action <incident-id>`;
   `--apply <id> --yes`), audit records appended to incident files.
 
-## [0.5] — 2026-08-07
+## [0.5] - 2026-08-07
 
 ### Added
 
@@ -35,7 +35,7 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
   input, constraint prompt, validated strict JSON output, `AI SYNTHESIS`
   rendering, graceful degradation.
 
-## [0.4] — 2026-08-07
+## [0.4] - 2026-08-07
 
 ### Added
 
@@ -43,7 +43,7 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
 - Config-regression analyzer (the "who changed it" hypothesis).
 - Risk-leveled, evidence-linked recommendations (read-only).
 
-## [0.3] — 2026-08-07
+## [0.3] - 2026-08-07
 
 ### Added
 
@@ -51,7 +51,7 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
 - Rule-based hypothesis engine (merge, rerank, outrank).
 - PVC, service, HPA analyzers.
 
-## [0.2] — 2026-08-07
+## [0.2] - 2026-08-07
 
 ### Added
 
@@ -59,7 +59,7 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
 - Prometheus collector (memory-metric evidence).
 - Scheduling, node-pressure, probe analyzers; scoring calibration.
 
-## [0.1] — 2026-08-07
+## [0.1] - 2026-08-07
 
 ### Added
 

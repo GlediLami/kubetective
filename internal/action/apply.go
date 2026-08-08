@@ -86,7 +86,7 @@ func (a *Applier) rollback(ctx context.Context, ref model.ResourceRef) (string, 
 	}
 
 	// Strategic merge on DeploymentSpec.Template would recursively MERGE the
-	// template (annotations maps merge; only lists replace) — kubectl rollout
+	// template (annotations maps merge; only lists replace) - kubectl rollout
 	// undo therefore does a full Update with the previous template, and so do
 	// we: replace the template wholesale, drop the revision annotation.
 	dep.Spec.Template = prevTmpl
@@ -102,5 +102,5 @@ func (a *Applier) restartPod(ctx context.Context, ref model.ResourceRef) (string
 	if err := a.kc.CoreV1().Pods(ref.Namespace).Delete(ctx, ref.Name, metav1.DeleteOptions{}); err != nil {
 		return "", fmt.Errorf("delete pod: %w", err)
 	}
-	return fmt.Sprintf("deleted pod/%s — controller will recreate it", ref.Name), nil
+	return fmt.Sprintf("deleted pod/%s - controller will recreate it", ref.Name), nil
 }
