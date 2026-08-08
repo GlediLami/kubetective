@@ -1,7 +1,7 @@
 # KubeTective Evaluation Report
 
-- engine: `v0.9.0`
-- date: 2026-08-08 16:51:27 UTC
+- engine: `v1.0.0`
+- date: 2026-08-08 17:52:08 UTC
 - suite: 16 scenarios
 
 ## Scenario results
@@ -14,7 +14,7 @@
 | dns-events-only | PASS | crashloop | 100% | 0s | - |
 | dns-failure | PASS | dns | 100% | 0s | - |
 | gitops-drift | PASS | config-regression | 100% | 0s | - |
-| healthy | PASS | - | - | 1ms | - |
+| healthy | PASS | - | - | 0s | - |
 | hpa-at-max | PASS | crashloop | 100% | 0s | - |
 | imagepull | PASS | image | 100% | 0s | - |
 | liveness-probe-failure | PASS | probe | 100% | 0s | - |
