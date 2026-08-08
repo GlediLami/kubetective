@@ -27,8 +27,8 @@ ACCENT = (74, 163, 255)
 BORDER = (41, 55, 75)
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-FONT_SIZE = 18
-LINE_H = 22
+FONT_SIZE = 24
+LINE_H = 30
 PAD_X = 24
 PAD_Y = 18
 
@@ -39,8 +39,8 @@ def main():
     ap.add_argument("--hard-frames", type=int, default=0)
     ap.add_argument("--command", default="kubetective replay scenarios/oom-after-deploy/record.jsonl")
     ap.add_argument("--charm-s", type=int, default=1, help="typing speed multiplier (higher=faster)")
-    ap.add_argument("--scale", type=float, default=0.62, help="render scale for gif size")
-    ap.add_argument("--colors", type=int, default=64, help="quantize to shared GIF palette (0=off)")
+    ap.add_argument("--scale", type=float, default=0.92, help="render scale for gif size")
+    ap.add_argument("--colors", type=int, default=256, help="quantize to shared GIF palette (0=off)")
     args = ap.parse_args()
 
     repo = Path(__file__).resolve().parent.parent
@@ -55,7 +55,25 @@ def main():
 
     font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
 
-    # wrap nothing: terminal output is already fixed-width
+    # terminal width: wrap over-long lines like a real terminal would
+    TERM_COLS = 118
+
+    def wrap_lines(raw):
+        out = []
+        for l in raw:
+            if len(l) <= TERM_COLS:
+                out.append(l)
+                continue
+            out.append(l[:TERM_COLS])
+            rest = l[TERM_COLS:]
+            while len(rest) > TERM_COLS - 4:
+                out.append(" " * 4 + rest[: TERM_COLS - 4])
+                rest = rest[TERM_COLS - 4:]
+            if rest:
+                out.append(" " * 4 + rest)
+        return out
+
+    output_lines = wrap_lines(output_lines)
     cols = max((len(l) for l in [f"$ {args.command}"] + output_lines if l), default=80)
     rows = max(4, len(output_lines) + 3)
 
@@ -92,11 +110,12 @@ def main():
     # intro: empty prompt + blinking cursor
     for t in range(8):
         frames.append(make_frame(drawn, 0, True, t))
-    # type the command
+    # type the command (frame every other char — plenty for 25fps)
     acc = ""
-    for ch in cmd_text:
+    for i, ch in enumerate(cmd_text):
         acc += ch
-        frames.append(make_frame([(acc, PROMPT)], len(acc) * 11, True, 0))
+        if i % 2 == 0 or i == len(cmd_text) - 1:
+            frames.append(make_frame([(acc, PROMPT)], len(acc) * 11, True, 0))
     drawn = [(cmd_text, PROMPT)]
 
     # stream the real output line by line
