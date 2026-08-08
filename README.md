@@ -52,7 +52,7 @@ RECOMMENDATION
   roll back deployment/prod/checkout to the last known-good revision [MEDIUM] - memory exhaustion after a change - rollback reverts the configuration that grew memory past the limit
 ```
 
-That output is real — it is the recorded incident `scenarios/oom-after-deploy`
+That output is the recorded incident `scenarios/oom-after-deploy`
 replayed through the engine. 11 analyzers cover OOM kills, crash loops, image
 pull failures, scheduling failures, node pressure, probe failures, PVC issues,
 service selector mismatches, HPA at max, DNS failures, and configuration
@@ -92,7 +92,7 @@ calibrated against a scenario benchmark (16 recorded incidents with ground truth
 and the calibration is validated leave-one-out before it is adopted. The optional
 LLM layer only explains the engine's verdict in plain language. It can never change
 scores, invent causes, or propose actions. Deterministic output means the same
-incident produces the same verdict in CI, in a demo, and in a replay — an LLM chat
+incident produces the same verdict in CI, in a demo, and in a replay an LLM chat
 cannot be a regression test.
 
 ## Features
@@ -135,8 +135,7 @@ cannot be a regression test.
 - **Wire a new evidence source** (e.g. Datadog, Grafana Cloud) behind the existing
   collector interface.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the design rules — the benchmark is
-the contract.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the design rules.
 
 ## Install
 
@@ -293,7 +292,7 @@ The calibrated scoring temperature is persisted to `~/.kubetective/config.json` 
 ## Alert integrations (inbound)
 
 Point a PagerDuty/Grafana/Slack webhook at `kubetective alert` and every alert
-becomes an investigation — with **zero API keys**: the payload is parsed locally,
+becomes an investigation with **zero API keys**: the payload is parsed locally,
 the engine uses its existing cluster access, and the opt-in completion webhook
 reports the result back out.
 
@@ -313,7 +312,7 @@ The target is extracted from the payload: Grafana `kubernetes_pod_name` /
 legacy `evalMatches` and unified `alerts[].labels` shapes), PagerDuty incident
 titles carrying a resource name (plus `impacted_services`/`service.summary` and
 Events API v2 `details` fields), and Slack command text (`deployment/checkout
-since=2h` — the `since=` window is honored). Payloads without a Kubernetes target
+since=2h`, the `since=` window is honored). Payloads without a Kubernetes target
 fail with a readable message instead of guessing. Window precedence:
 `--since` flag > payload > `kubetective.yaml` > 30m.
 
