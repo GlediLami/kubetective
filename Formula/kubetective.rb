@@ -4,8 +4,8 @@
 #   brew tap gledilami/kubetective https://github.com/GlediLami/kubetective.git
 #   brew install gledilami/kubetective/kubetective
 #
-# The url/sha256 below are placeholders until the first tagged release.
-# After tagging, run: hack/update-formula.sh <tag>  (see CONTRIBUTING.md).
+# The url/sha256 point at the tagged release tarball (kept in sync by
+# hack/update-formula.sh — see CONTRIBUTING.md).
 
 class Kubetective < Formula
   desc "Kubernetes incident investigation engine with explainable, calibrated scoring"
