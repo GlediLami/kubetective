@@ -11,7 +11,7 @@ class Kubetective < Formula
   desc "Kubernetes incident investigation engine with explainable, calibrated scoring"
   homepage "https://github.com/GlediLami/kubetective"
   url "https://github.com/GlediLami/kubetective/archive/refs/tags/v0.7.0.tar.gz"
-  sha256 "REPLACE_WITH_RELEASE_SHA256"
+  sha256 "6fcfc9734781f25f86f1cf204829876066fa5311b2e8ffe1a306bfbc7769d90c"
   license "Apache-2.0"
 
   depends_on "go" => :build
