@@ -100,13 +100,16 @@ func slug(r model.ResourceRef) string {
 	return strings.Trim(name, "-")
 }
 
-// Save writes the incident as JSONL and returns its file path.
+// Save writes the incident as JSONL and returns its file path. Files and the
+// store directory are created 0600/0700: incident records may carry
+// container log snippets and pod identity facts, so they stay owner-only
+// (security review v1.0 finding).
 func (s *Store) Save(inc *model.Incident) (string, error) {
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return "", err
 	}
 	path := filepath.Join(s.dir, inc.ID+".jsonl")
-	f, err := os.Create(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", err
 	}

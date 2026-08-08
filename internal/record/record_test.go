@@ -277,3 +277,28 @@ func readLines(path string) ([]string, error) {
 func writeLines(path string, lines []string) error {
 	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }
+
+// TestRecordFilePermissions pins the security-review fix: incident files and
+// the store directory must be owner-only (they may hold log snippets).
+func TestRecordFilePermissions(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "store")
+	s := NewStore(dir)
+	inc := &model.Incident{ID: "incident-perm", Observations: []model.Observation{testObservation("pod.state", time.Now())}}
+	if _, err := s.Save(inc); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(filepath.Join(dir, inc.ID+".jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := fi.Mode().Perm(); perm != 0o600 {
+		t.Errorf("record file mode = %o, want 600", perm)
+	}
+	di, err := os.Stat(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := di.Mode().Perm(); perm != 0o700 {
+		t.Errorf("store dir mode = %o, want 700", perm)
+	}
+}
