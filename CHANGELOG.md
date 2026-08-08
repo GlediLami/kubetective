@@ -4,7 +4,19 @@ All notable changes to KubeTective are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 does **not** yet follow Semantic Versioning (0.x - API may change).
 
-## [Unreleased]
+## [1.0.0] - 2026-08-08
+
+> **v1.0.0 GA declaration.** Three checklist items are **waived by owner
+> decision** for this release, tracked for the next release:
+>
+> 1. **Calibration at scale**: 15 ground-truth points ship today, not 30
+>    (the evaluation gate still passes: ECE within threshold, LOO-validated
+>    temperature).
+> 2. **Signed releases**: cosign keys + CI signing wiring remain open; the
+>    goreleaser config is ready for them.
+> 3. **External security audit**: a self-review is published instead
+>    (`reports/security/review-v1.0.md`); third-party review is the first
+>    stop on the next release.
 
 ### Added
 
@@ -16,55 +28,67 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
   `GET /incidents/{id}`); self-telemetry (`GET /metrics`, expvar);
   GitHub Actions CI (build/vet/test/benchmark/evaluate gates);
   `dns-events-only` scenario (suite: 16 scenarios).
-- v1.0 work-in-progress — `kubetective incidents search`: filter the
-  incident store by target, cluster, analyzer, minimum severity, and
-  time window (`--since`/`--until`), newest first (`--limit`); the
-  linear-scan JSONL precursor to the indexed memory (roadmap v2).
-- Container smoke test now covers the full action-safety loop:
-  preview plans the restart-pod action, `--apply` without `--yes` is
-  rejected, and an approved apply deletes/recreates the pod and appends
-  the audit record - all under the least-privilege RBAC (records
-  persist across jobs via a PVC). Any gate failure fails the build.
-- Record versioning contract: `record.Load` now rejects records
-  written by a newer engine loudly (upgrade instead of silent
-  mis-reads), with upgrade tests pinning older/no-meta/meta-version
-  reads for future schema changes.
+- `kubetective incidents search`: filter the incident store by target,
+  cluster, analyzer, minimum severity, and time window
+  (`--since`/`--until`), newest first (`--limit`); the linear-scan
+  JSONL precursor to the indexed memory (roadmap v2).
+- Container smoke test covers the full action-safety loop: preview plans
+  the restart-pod action, `--apply` without `--yes` is rejected, and an
+  approved apply deletes/recreates the pod and appends the audit record -
+  all under the least-privilege RBAC (records persist across jobs via a
+  PVC). Any gate failure fails the build.
+- Record versioning contract: `record.Load` now rejects records written
+  by a newer engine loudly (upgrade instead of silent mis-reads), with
+  upgrade tests pinning older/no-meta/meta-version reads.
 - Operational maturity: `kubetective serve` shuts down gracefully on
-  SIGINT/SIGTERM and exposes pprof profiling endpoints on
-  `/debug/pprof/` behind a `--pprof` flag.
-- Dependency license report target (`make license-report`, go-licenses
-  scan; all current deps are redistributable); CODEOWNERS and a pull
-  request template.
+  SIGINT/SIGTERM and exposes pprof behind a `--pprof` flag.
+- Dependency license report target (`make license-report`); CODEOWNERS
+  and a pull request template.
 - CLI target parsing accepts fully-qualified `kind/namespace/name`
-  targets, the form incident records store - replay and action previews
-  of namespaced incidents now resolve correctly.
-- Completion webhook, opt-in and HMAC-secured: `webhook_url` +
-  `webhook_secret` in `kubetective.yaml` (or `KUBETECTIVE_WEBHOOK_URL` /
-  `KUBETECTIVE_WEBHOOK_SECRET`) POSTs a signed notification after every
-  investigation. The signature travels in `X-Kubetective-Signature`
-  (HMAC-SHA256 of the raw body); receivers must verify before parsing.
+  targets, the form incident records store.
+- Completion webhook, opt-in and HMAC-secured (`webhook_url` +
+  `webhook_secret`): a signed notification after every investigation in
+  `X-Kubetective-Signature`; receivers must verify before parsing.
   Notification failure never fails the investigation.
-- Structured logs (operational maturity): `--log-format json|text`
-  (or `KUBETECTIVE_LOG_FORMAT`) emits slog records to stderr for
-  investigations, HTTP requests (`kubetective serve`), and action
-  applies. Logging is opt-in: output is byte-identical when off.
-- Evaluation report is now a committed artifact
-  (`reports/evaluation/latest.md`, `make report`): the Action safety
-  section lists the planned remediation actions per scenario, and the
-  evaluate gate fails if any action is ever planned for a healthy
-  scenario (unsafe-action rate = 0).
+- Structured logs (`--log-format json|text` or `KUBETECTIVE_LOG_FORMAT`)
+  for investigations, HTTP requests, and action applies; byte-identical
+  output when off.
+- Evaluation report as a committed artifact (`reports/evaluation/latest.md`,
+  `make report`): Action safety section + unsafe-action-rate = 0 gate.
+- **Alert integrations (inbound)**: `kubetective alert pagerduty|grafana|slack`
+  investigates from a webhook payload (stdin or `--file`), with **zero
+  API keys**. Grafana `kubernetes_*` alert labels (unified + legacy
+  shapes), PagerDuty incident titles / impacted services / Events API v2
+  details, and Slack slash-command text (`deployment/checkout since=2h`)
+  name the target; the `since=` window is honored (precedence: flag >
+  payload > config > 30m). Payloads without a Kubernetes target fail with
+  a readable message instead of guessing. Runs the same recorded,
+  webhook-notified pipeline as `investigate`.
+- **The uninstall test** (roadmap v1.0 #10): `hack/uninstall-test.sh`
+  (CI job `uninstall-test`) clones fresh, builds per the docs, verifies
+  both binaries, runs the offline benchmark, and asserts `doctor` fails
+  without a cluster with an actionable message - never a stack trace.
+- **Docs site**: `site/` (single-page static HTML, no framework)
+  published to GitHub Pages by `.github/workflows/pages.yml` at
+  https://gledilami.github.io/kubetective/ - install, quickstart,
+  integrations, scoring, ops, security.
+- **krew submission script**: `hack/submit-krew.sh` completes the
+  plugin-index submission in one command - verifies release assets
+  exist, fills the per-platform sha256 values, commits the manifest,
+  and opens the krew-index PR. It refuses to run without real release
+  assets (no placeholder hashes can ship).
+- **Security hardening** (from the v1.0 self-review, the only finding):
+  incident records are owner-only on disk (files 0600, store dir 0700;
+  previously umask-dependent) with a regression test.
 
 ### Fixed
 
 - `incidents similar --cluster` scoping was bypassed by incidents that
   carry no cluster id; untagged (legacy) records no longer leak into
-  scoped queries (strict scoping; unscoped queries unchanged).
+  scoped queries.
 - Container smoke gate: `--apply` outside the approval gate no longer
-  selects the wrong recommended action when a preview plans several
-  (the smoke applies the restart action explicitly).
-- `gofmt`, `go vet`, and `staticcheck` clean across the tree (spot
-  fixes: duplicated comment in the rollback applier, unused helper,
-  loop-vs-append, numeric HTTP status).
+  selects the wrong recommended action when a preview plans several.
+- `gofmt`, `go vet`, and `staticcheck` clean across the tree.
 
 ## [0.9] - 2026-08-08
 
