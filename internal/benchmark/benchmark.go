@@ -24,8 +24,8 @@ import (
 
 // Scenario is the ground-truth spec of one benchmark scenario.
 type Scenario struct {
-	Name        string     `yaml:"name"`
-	Description string     `yaml:"description"`
+	Name        string      `yaml:"name"`
+	Description string      `yaml:"description"`
 	GroundTruth GroundTruth `yaml:"ground_truth"`
 }
 
@@ -184,10 +184,10 @@ type SuiteResult struct {
 
 // CategoryAccuracy is the top-1 category accuracy per ground-truth category.
 type CategoryAccuracy struct {
-	Category  string
-	Correct   int
-	Total     int
-	Accuracy  float64
+	Category string
+	Correct  int
+	Total    int
+	Accuracy float64
 }
 
 // EngineFactory builds an engine with the given collectors wired (plus the

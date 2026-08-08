@@ -1,7 +1,7 @@
 // Package graph builds the bounded in-memory evidence graph from normalized
 // observations: typed edges (OWNS, RUNS_ON, CHANGED_BEFORE) that the
 // investigation pipeline and the "what changed" ranking both consume
-//.
+// .
 //
 // Edge discipline: structural edges (OWNS/RUNS_ON) come from API relationships
 // via resource.owner / pod.state observations; CHANGED_BEFORE comes from the

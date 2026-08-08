@@ -443,13 +443,20 @@ func parseTarget(args []string, namespace string) (model.ResourceRef, error) {
 	return parseResourceRef(args[0], namespace)
 }
 
+// parseResourceRef accepts "kind/name", fully-qualified "kind/ns/name"
+// (the form incident Meta.Target is stored in), or a bare name (pod).
 func parseResourceRef(raw, namespace string) (model.ResourceRef, error) {
 	ref := model.ResourceRef{Namespace: namespace}
-	if strings.Contains(raw, "/") {
-		parts := strings.SplitN(raw, "/", 2)
+	parts := strings.Split(raw, "/")
+	switch len(parts) {
+	case 1:
+		ref.Kind, ref.Name = "pod", parts[0]
+	case 2:
 		ref.Kind, ref.Name = parts[0], parts[1]
-	} else {
-		ref.Kind, ref.Name = "pod", raw
+	case 3:
+		ref.Kind, ref.Namespace, ref.Name = parts[0], parts[1], parts[2]
+	default:
+		return model.ResourceRef{}, fmt.Errorf("invalid target %q - use kind/name or kind/namespace/name", raw)
 	}
 	if ref.Kind == "" || ref.Name == "" {
 		return model.ResourceRef{}, fmt.Errorf("invalid target %q - use kind/name (e.g. deployment/checkout)", raw)

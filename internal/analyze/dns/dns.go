@@ -104,7 +104,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 	var (
 		dnsEvents []model.Observation
 		symptom   bool
-		coredns  []model.Observation
+		coredns   []model.Observation
 	)
 	for _, o := range in.Observations {
 		switch {
@@ -159,12 +159,12 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		severity = model.SevHigh
 	}
 	finding := model.Finding{
-		ID:       fmt.Sprintf("dns.%s", res.Name),
-		Analyzer: a.ID(),
-		Severity: severity,
-		Title:    "DNS resolution failure",
+		ID:          fmt.Sprintf("dns.%s", res.Name),
+		Analyzer:    a.ID(),
+		Severity:    severity,
+		Title:       "DNS resolution failure",
 		Description: fmt.Sprintf("Workload %s cannot resolve names: coreDNS %v, %d DNS-flavored event(s), crash symptom %v", res.Name, map[bool]string{true: "DOWN", false: "up"}[down], len(dnsEvents), symptom),
-		Evidence: evidenceIDs(evs),
+		Evidence:    evidenceIDs(evs),
 	}
 
 	h := model.Hypothesis{

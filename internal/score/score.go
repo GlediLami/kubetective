@@ -5,7 +5,7 @@
 //
 // Every point of margin maps to a visible ScoreLine backed by an Observation,
 // and the temperature T is calibrated against the scenario benchmark
-//.
+// .
 package score
 
 import (

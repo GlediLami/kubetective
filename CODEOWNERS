@@ -1,0 +1,10 @@
+# Code owners: every change needs an approving review.
+
+* @GlediLami
+
+# Sensitive surfaces: engine + scoring + actions get the closest look.
+/internal/engine/ @GlediLami
+/internal/score/  @GlediLami
+/internal/action/ @GlediLami
+/internal/record/ @GlediLami
+/pkg/            @GlediLami

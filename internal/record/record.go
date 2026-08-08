@@ -2,7 +2,7 @@
 // records (one Observation per line) - the replay and benchmark substrate.
 // A replay runs the pipeline over recorded observations instead of live
 // collectors, so investigations are reproducible and debuggable
-//.
+// .
 package record
 
 import (
@@ -44,9 +44,9 @@ func NewDefaultStore() *Store { return NewStore(DefaultDir()) }
 
 // line is one JSONL record. Meta is the first line of a file.
 type line struct {
-	Type        string                    `json:"type"` // meta | observation | result | action.audit | ...
-	Meta        *incidentMetaLine         `json:"meta,omitempty"`
-	Observation *model.Observation        `json:"observation,omitempty"`
+	Type        string             `json:"type"` // meta | observation | result | action.audit | ...
+	Meta        *incidentMetaLine  `json:"meta,omitempty"`
+	Observation *model.Observation `json:"observation,omitempty"`
 	// Result is lazy-parsed: the file is an append-only log that also carries
 	// foreign line kinds (action.audit etc.) whose fields must never break
 	// replay (regression: audit's string "result" field collided here).
@@ -202,6 +202,15 @@ func (s *Store) Load(id string) (*model.Incident, error) {
 	}
 	if inc.Meta.RecordVersion == 0 {
 		inc.Meta.RecordVersion = RecordVersion
+	}
+	// Contract rule: records written by a NEWER engine are never read
+	// speculatively. Loading one must fail loudly so the user installs the
+	// matching kubetective instead of getting silently mis-shapen results.
+	// Records from older engines (lower version) read fine: Load is a
+	// forward-compatible, zero-migration read.
+	if inc.Meta.RecordVersion > RecordVersion {
+		return nil, fmt.Errorf("record %s: written with record version %d, this build supports <= %d (install a newer kubetective to read it)",
+			filepath.Base(path), inc.Meta.RecordVersion, RecordVersion)
 	}
 	return inc, nil
 }

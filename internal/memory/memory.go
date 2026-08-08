@@ -101,7 +101,10 @@ func Similar(store *record.Store, incidentID string, topN int, clusterID string)
 		if err != nil {
 			continue // skip unreadable records
 		}
-		if clusterID != "" && other.Meta.ClusterID != "" && other.Meta.ClusterID != clusterID {
+		// Strict cluster scoping: when a scope is requested, records without
+		// a cluster id (legacy, pre-multi-cluster) are excluded too - an
+		// unscoped record must never leak into a scoped query.
+		if clusterID != "" && other.Meta.ClusterID != clusterID {
 			continue
 		}
 		overlap := jaccard(targetKinds, kindsOf(other))

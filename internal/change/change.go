@@ -15,19 +15,19 @@ import (
 
 // changeEventReasons are event reasons that signal a meaningful change.
 var changeEventReasons = map[string]bool{
-	"ReplicaSetCreated":  true,
-	"ScalingReplicaSet":  true,
-	"SuccessfulCreate":   true,
-	"SuccessfulDelete":   true,
-	"Created":            true,
-	"Started":            true,
-	"Pulled":             true,
-	"RollingUpdate":      true,
-	"Killing":            true,
-	"BackOff":            true,
-	"FailedScheduling":   true,
-	"Unhealthy":          true,
-	"OOMKilling":         true,
+	"ReplicaSetCreated": true,
+	"ScalingReplicaSet": true,
+	"SuccessfulCreate":  true,
+	"SuccessfulDelete":  true,
+	"Created":           true,
+	"Started":           true,
+	"Pulled":            true,
+	"RollingUpdate":     true,
+	"Killing":           true,
+	"BackOff":           true,
+	"FailedScheduling":  true,
+	"Unhealthy":         true,
+	"OOMKilling":        true,
 }
 
 // Detect extracts candidate changes from observations.

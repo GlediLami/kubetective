@@ -90,7 +90,9 @@ func TestSimilarScopedToCluster(t *testing.T) {
 	if len(matches) != 0 {
 		t.Errorf("matches = %d, want 0 (cluster-two incident excluded by scope)", len(matches))
 	}
-	// Untagged incidents (no cluster id) are comparable from any scope.
+	// Strict scoping: untagged incidents (no cluster id) are excluded from
+	// scoped queries too - unscoped memory must never leak into a scoped
+	// query (regression: legacy records bypassed the cluster filter).
 	legacy := inc("inc-c", "deployment/prod/pay", "pod.state", "container.terminated")
 	legacy.Meta.ClusterID = ""
 	if _, err := store.Save(legacy); err != nil {
@@ -100,8 +102,23 @@ func TestSimilarScopedToCluster(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(matches) != 1 || matches[0].IncidentID != "inc-c" {
-		t.Errorf("matches = %+v, want only inc-c (untagged compared)", matches)
+	if len(matches) != 0 {
+		t.Errorf("matches = %+v, want none (untagged incident must not leak into the scope)", matches)
+	}
+	// Untagged incidents match when NO scope is requested, alongside every
+	// other same-shape record.
+	matches, err = Similar(store, "inc-a", 5, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"inc-b": true, "inc-c": true}
+	if len(matches) != 2 {
+		t.Fatalf("matches = %+v, want inc-b + inc-c", matches)
+	}
+	for _, m := range matches {
+		if !want[m.IncidentID] {
+			t.Errorf("unexpected match %s", m.IncidentID)
+		}
 	}
 }
 

@@ -45,9 +45,9 @@ func TestParseExplanationFencedAndSanitized(t *testing.T) {
 func TestParseExplanationRejectsMalformed(t *testing.T) {
 	cases := []string{
 		"not json at all",
-		`{"summary":""}`,          // missing summary
-		`{"explanation":""}`,      // missing explanation
-		`{"summary":"s"}`,         // missing explanation
+		`{"summary":""}`,     // missing summary
+		`{"explanation":""}`, // missing explanation
+		`{"summary":"s"}`,    // missing explanation
 		`{"summary":"s","explanation":"e","followups":[}`, // unbalanced array
 	}
 	for _, c := range cases {

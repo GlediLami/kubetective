@@ -1,9 +1,9 @@
 package server
 
 import (
-	"io"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"

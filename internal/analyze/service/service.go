@@ -32,7 +32,7 @@ func (a *Analyzer) Supports(o model.Observation) bool {
 
 func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]model.Finding, []model.Hypothesis, []model.Evidence, error) {
 	type svcState struct {
-		obs    model.Observation
+		obs       model.Observation
 		readyPods int
 	}
 	svcs := map[string]*svcState{}

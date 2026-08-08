@@ -2,6 +2,8 @@ package record
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,4 +138,142 @@ func TestTargetSurvivesSaveLoad(t *testing.T) {
 	if got.Meta.ClusterID != "cluster-abc" {
 		t.Errorf("Meta.ClusterID after round-trip = %q, want cluster-abc", got.Meta.ClusterID)
 	}
+}
+
+// TestRecordVersionContract pins the upgrade rules in the load path:
+//
+//   - a record with a version that is OLDER (or equal) than the build reads
+//     cleanly (zero-migration forward reads) — including legacy v0 records
+//     that have no meta line at all, which default to the current version;
+//   - a record with a NEWER version must be rejected, not silently read as
+//     if it were current (that is the contract that lets us ship schema
+//     changes as version bumps without a migration engine).
+func TestRecordVersionContract(t *testing.T) {
+	t.Run("older version reads", func(t *testing.T) {
+		dir := t.TempDir()
+		store := NewStore(dir)
+		inc := &model.Incident{
+			ID:           "incident-v1-old",
+			Meta:         model.IncidentMeta{RecordVersion: 1},
+			Observations: []model.Observation{testObservation("pod.state", time.Now())},
+		}
+		if _, err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		// Rewrite the version down to simulate a record from an older engine.
+		if err := rewriteMetaVersion(store, inc.ID, 1); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.Load(inc.ID)
+		if err != nil {
+			t.Fatalf("older-version record must load, got: %v", err)
+		}
+		if got.Meta.RecordVersion != 1 {
+			t.Errorf("RecordVersion = %d, want 1 preserved", got.Meta.RecordVersion)
+		}
+		if len(got.Observations) != 1 {
+			t.Errorf("observations lost on older-version load")
+		}
+	})
+
+	t.Run("no meta line defaults to current", func(t *testing.T) {
+		dir := t.TempDir()
+		store := NewStore(dir)
+		inc := &model.Incident{
+			ID:           "incident-v0-nometa",
+			Observations: []model.Observation{testObservation("pod.state", time.Now())},
+		}
+		if _, err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		if err := stripMetaLine(store, inc.ID); err != nil {
+			t.Fatal(err)
+		}
+		got, err := store.Load(inc.ID)
+		if err != nil {
+			t.Fatalf("v0-style record must load, got: %v", err)
+		}
+		if got.Meta.RecordVersion != RecordVersion {
+			t.Errorf("RecordVersion = %d, want default %d", got.Meta.RecordVersion, RecordVersion)
+		}
+	})
+
+	t.Run("newer version rejected", func(t *testing.T) {
+		dir := t.TempDir()
+		store := NewStore(dir)
+		inc := &model.Incident{
+			ID:           "incident-future",
+			Meta:         model.IncidentMeta{RecordVersion: RecordVersion + 1},
+			Observations: []model.Observation{testObservation("pod.state", time.Now())},
+		}
+		if _, err := store.Save(inc); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.Load(inc.ID); err == nil {
+			t.Fatal("future-version record must be rejected")
+		}
+	})
+}
+
+// rewriteMetaVersion rewrites the meta line of a saved record to the given
+// record version (simulating a record produced by an older engine).
+func rewriteMetaVersion(store *Store, id string, version int) error {
+	path := filepath.Join(store.dir, id+".jsonl")
+	lines, err := readLines(path)
+	if err != nil {
+		return err
+	}
+	var out []string
+	for _, l := range lines {
+		var meta incidentMetaLine
+		if json.Unmarshal([]byte(l), &meta) == nil && meta.IncidentID == id {
+			raw, err := json.Marshal(map[string]any{
+				"type": "meta",
+				"meta": map[string]any{"incident_id": id, "record_version": version},
+			})
+			if err != nil {
+				return err
+			}
+			out = append(out, string(raw))
+			continue
+		}
+		out = append(out, l)
+	}
+	return writeLines(path, out)
+}
+
+// stripMetaLine removes the meta line entirely, emulating v0-era records.
+func stripMetaLine(store *Store, id string) error {
+	path := filepath.Join(store.dir, id+".jsonl")
+	lines, err := readLines(path)
+	if err != nil {
+		return err
+	}
+	var out []string
+	for _, l := range lines {
+		var meta incidentMetaLine
+		if json.Unmarshal([]byte(l), &meta) == nil && meta.IncidentID == id {
+			continue
+		}
+		out = append(out, l)
+	}
+	return writeLines(path, out)
+}
+
+func readLines(path string) ([]string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, l := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		if l != "" {
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func writeLines(path string, lines []string) error {
+	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
 }

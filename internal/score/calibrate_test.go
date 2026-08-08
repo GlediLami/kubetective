@@ -10,12 +10,12 @@ import (
 // ≈ 0.5 for the uncertain one).
 func wellCalibratedPoints() []CalibrationPoint {
 	return []CalibrationPoint{
-		{Margin: 75, Correct: true},  // sigmoid(75/26) ≈ 0.947
-		{Margin: 60, Correct: true},  // ≈ 0.909
-		{Margin: 55, Correct: true},  // ≈ 0.892
-		{Margin: 30, Correct: true},  // ≈ 0.760
-		{Margin: 20, Correct: true},  // ≈ 0.685
-		{Margin: 0, Correct: false}, // ≈ 0.500 — borderline, counted wrong
+		{Margin: 75, Correct: true},   // sigmoid(75/26) ≈ 0.947
+		{Margin: 60, Correct: true},   // ≈ 0.909
+		{Margin: 55, Correct: true},   // ≈ 0.892
+		{Margin: 30, Correct: true},   // ≈ 0.760
+		{Margin: 20, Correct: true},   // ≈ 0.685
+		{Margin: 0, Correct: false},   // ≈ 0.500 — borderline, counted wrong
 		{Margin: -20, Correct: false}, // ≈ 0.315
 	}
 }

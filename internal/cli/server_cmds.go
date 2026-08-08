@@ -5,9 +5,13 @@ import (
 	contextPkg "context"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"os"
+	"os/signal"
 	"os/user"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
@@ -21,12 +25,14 @@ import (
 	"github.com/GlediLami/kubetective/pkg/api"
 )
 
-// newServeCmd runs the REST API (v0.6: server mode).
+// newServeCmd runs the REST API (v0.6: server mode). Operational maturity
+// (v1.0): graceful shutdown on SIGINT/SIGTERM plus optional pprof endpoints.
 func newServeCmd() *cobra.Command {
 	var (
-		listen     string
-		kubeconfig string
-		kubeCtx    string
+		listen      string
+		kubeconfig  string
+		kubeCtx     string
+		enablePprof bool
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -36,20 +42,56 @@ func newServeCmd() *cobra.Command {
   POST /v1/investigate   run an investigation
   GET  /v1/incidents     list recorded incidents
   GET  /v1/incidents/{id} read a full incident record
-  GET  /healthz          liveness`,
+  GET  /healthz          liveness
+
+Gracefully drains on SIGINT/SIGTERM. With --pprof, runtime profiling
+endpoints are exposed under /debug/pprof/ (cpu/mem dumps for on-call
+debugging - only enable when you need a profile).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			collectors, _, clusterID, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
 			if err != nil {
 				return err
 			}
 			rest := &server.REST{Inv: newEngine(collectors...), Store: record.NewDefaultStore(), ClusterID: clusterID}
-			fmt.Printf("kubetective serve listening on %s\n", listen)
-			return http.ListenAndServe(listen, rest.Handler())
+			var handler http.Handler = rest.Handler()
+			if enablePprof {
+				mux := http.NewServeMux()
+				mux.Handle("/", handler)
+				mux.HandleFunc("/debug/pprof/", pprof.Index)
+				mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+				mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+				mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+				mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+				handler = mux
+			}
+
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+			srv := &http.Server{Addr: listen, Handler: handler}
+			errCh := make(chan error, 1)
+			go func() {
+				fmt.Printf("kubetective serve listening on %s\n", listen)
+				errCh <- srv.ListenAndServe()
+			}()
+
+			select {
+			case err := <-errCh:
+				return err
+			case <-ctx.Done():
+			}
+			fmt.Println("shutting down gracefully (SIGINT/SIGTERM) ...")
+			shutCtx, cancel := contextPkg.WithTimeout(contextPkg.Background(), 10*time.Second)
+			defer cancel()
+			if err := srv.Shutdown(shutCtx); err != nil {
+				return fmt.Errorf("graceful shutdown: %w", err)
+			}
+			return nil
 		},
 	}
 	cmd.Flags().StringVar(&listen, "listen", ":8080", "listen address")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig path")
 	cmd.Flags().StringVar(&kubeCtx, "context", "", "kubeconfig context")
+	cmd.Flags().BoolVar(&enablePprof, "pprof", false, "expose pprof profiling endpoints on /debug/pprof/")
 	return cmd
 }
 
@@ -156,6 +198,66 @@ cluster (multi-cluster memory v0.9).`,
 	similar.Flags().IntVar(&topN, "top", 5, "maximum matches to show (0 = all)")
 	similar.Flags().StringVar(&cluster, "cluster", "", "only compare incidents from this cluster id (default: all clusters)")
 
+	var (
+		searchTarget   string
+		searchCluster  string
+		searchAnalyzer string
+		searchSeverity string
+		searchSince    string
+		searchUntil    string
+		searchLimit    int
+	)
+	search := &cobra.Command{
+		Use:   "search",
+		Short: "Search recorded incidents (incident memory v2 precursor)",
+		Long: `Filters the incident store by target, cluster, analyzer, minimum
+severity, and time window. Memory-before-AI: the same store that powers
+'similar' and 'replay', scanned linearly (the documented scale boundary).`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			q := record.SearchQuery{
+				Target:   searchTarget,
+				Cluster:  searchCluster,
+				Analyzer: searchAnalyzer,
+				Severity: model.Severity(searchSeverity),
+				Limit:    searchLimit,
+			}
+			if searchSince != "" {
+				d, err := time.ParseDuration(searchSince)
+				if err != nil {
+					return fmt.Errorf("invalid --since: %v", err)
+				}
+				q.Since = time.Now().Add(-d)
+			}
+			if searchUntil != "" {
+				d, err := time.ParseDuration(searchUntil)
+				if err != nil {
+					return fmt.Errorf("invalid --until: %v", err)
+				}
+				q.Until = time.Now().Add(-d)
+			}
+			hits, err := record.NewDefaultStore().Search(q)
+			if err != nil {
+				return err
+			}
+			if len(hits) == 0 {
+				fmt.Println("no incidents match the filters")
+				return nil
+			}
+			for _, h := range hits {
+				fmt.Println(h)
+			}
+			return nil
+		},
+	}
+	search.Flags().StringVar(&searchTarget, "target", "", "substring match on the investigated target (e.g. checkout)")
+	search.Flags().StringVar(&searchCluster, "cluster", "", "substring match on the cluster id")
+	search.Flags().StringVar(&searchAnalyzer, "analyzer", "", "substring match on a finding analyzer (oom, crashloop, ...)")
+	search.Flags().StringVar(&searchSeverity, "severity", "", "minimum severity: INFO | WARNING | HIGH | CRITICAL")
+	search.Flags().StringVar(&searchSince, "since", "", "only incidents newer than now-<duration> (e.g. 24h)")
+	search.Flags().StringVar(&searchUntil, "until", "", "only incidents older than now-<duration>")
+	search.Flags().IntVar(&searchLimit, "limit", 20, "maximum results (0 = all)")
+
 	cmd := &cobra.Command{
 		Use:   "incidents",
 		Short: "List recorded incidents",
@@ -163,6 +265,7 @@ cluster (multi-cluster memory v0.9).`,
 	}
 	cmd.AddCommand(list)
 	cmd.AddCommand(similar)
+	cmd.AddCommand(search)
 	return cmd
 }
 

@@ -31,7 +31,7 @@ const step = 30 * time.Second
 
 // Metric names this collector knows how to fetch (v0.2 scope).
 const (
-	MetricMemory = "container_memory_working_set_bytes"
+	MetricMemory   = "container_memory_working_set_bytes"
 	MetricThrottle = "container_cpu_cfs_throttled_periods_total"
 	MetricCPUUsage = "container_cpu_usage_seconds_total"
 )

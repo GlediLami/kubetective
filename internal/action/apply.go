@@ -37,7 +37,6 @@ func (a *Applier) Apply(ctx context.Context, act Action) (string, error) {
 }
 
 // rollback reverts the deployment's spec.template to the previous revision's
-// rollback reverts the deployment's spec.template to the previous revision's
 // template (the same effect as `kubectl rollout undo`): find the owned
 // ReplicaSets, take the one with the highest revision below the current one,
 // update the deployment with the previous template and drop the revision

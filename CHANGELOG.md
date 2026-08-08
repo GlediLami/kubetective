@@ -16,6 +16,40 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
   `GET /incidents/{id}`); self-telemetry (`GET /metrics`, expvar);
   GitHub Actions CI (build/vet/test/benchmark/evaluate gates);
   `dns-events-only` scenario (suite: 16 scenarios).
+- v1.0 work-in-progress — `kubetective incidents search`: filter the
+  incident store by target, cluster, analyzer, minimum severity, and
+  time window (`--since`/`--until`), newest first (`--limit`); the
+  linear-scan JSONL precursor to the indexed memory (roadmap v2).
+- Container smoke test now covers the full action-safety loop:
+  preview plans the restart-pod action, `--apply` without `--yes` is
+  rejected, and an approved apply deletes/recreates the pod and appends
+  the audit record - all under the least-privilege RBAC (records
+  persist across jobs via a PVC). Any gate failure fails the build.
+- Record versioning contract: `record.Load` now rejects records
+  written by a newer engine loudly (upgrade instead of silent
+  mis-reads), with upgrade tests pinning older/no-meta/meta-version
+  reads for future schema changes.
+- Operational maturity: `kubetective serve` shuts down gracefully on
+  SIGINT/SIGTERM and exposes pprof profiling endpoints on
+  `/debug/pprof/` behind a `--pprof` flag.
+- Dependency license report target (`make license-report`, go-licenses
+  scan; all current deps are redistributable); CODEOWNERS and a pull
+  request template.
+- CLI target parsing accepts fully-qualified `kind/namespace/name`
+  targets, the form incident records store - replay and action previews
+  of namespaced incidents now resolve correctly.
+
+### Fixed
+
+- `incidents similar --cluster` scoping was bypassed by incidents that
+  carry no cluster id; untagged (legacy) records no longer leak into
+  scoped queries (strict scoping; unscoped queries unchanged).
+- Container smoke gate: `--apply` outside the approval gate no longer
+  selects the wrong recommended action when a preview plans several
+  (the smoke applies the restart action explicitly).
+- `gofmt`, `go vet`, and `staticcheck` clean across the tree (spot
+  fixes: duplicated comment in the rollback applier, unused helper,
+  loop-vs-append, numeric HTTP status).
 
 ## [0.9] - 2026-08-08
 

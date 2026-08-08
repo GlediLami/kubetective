@@ -3,7 +3,7 @@ BIN_DIR ?= bin
 PREFIX  ?= $(HOME)/.local
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 
-.PHONY: build test vet fmt tidy install install-plugin scenarios clean check-version bump-version install-hooks release tarball
+.PHONY: build test vet fmt tidy license-report install install-plugin scenarios clean check-version bump-version install-hooks release tarball
 
 build:
 	$(GO) build -o $(BIN_DIR)/kubetective ./cmd/kubetective
@@ -20,6 +20,13 @@ fmt:
 
 tidy:
 	$(GO) mod tidy
+
+# dependency license report (v1.0 hygiene): fails if any dependency is not
+# redistributable. All current deps: Apache-2.0 / BSD / MIT / MPL-2.0 / ISC.
+license-report:
+	mkdir -p dist
+	$(GO) run github.com/google/go-licenses@latest report ./... > dist/licenses.csv
+	@echo "dist/licenses.csv written ($(shell wc -l < dist/licenses.csv) rows)"
 
 install: build
 	install -m 0755 $(BIN_DIR)/kubetective $(PREFIX)/bin/kubetective

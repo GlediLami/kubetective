@@ -114,13 +114,13 @@ func oomFixture(t *testing.T) (client *fake.Clientset, podName string) {
 		},
 	}
 	ev := &corev1.Event{
-		ObjectMeta:      metav1.ObjectMeta{Name: "e1", Namespace: ns},
-		InvolvedObject:  corev1.ObjectReference{Kind: "Pod", Name: podName, Namespace: ns},
-		Type:            "Warning",
-		Reason:          "OOMKilling",
-		Message:         "Killed container checkout",
-		Count:           3,
-		LastTimestamp:   metav1.Time{Time: start.Add(6 * time.Minute)},
+		ObjectMeta:     metav1.ObjectMeta{Name: "e1", Namespace: ns},
+		InvolvedObject: corev1.ObjectReference{Kind: "Pod", Name: podName, Namespace: ns},
+		Type:           "Warning",
+		Reason:         "OOMKilling",
+		Message:        "Killed container checkout",
+		Count:          3,
+		LastTimestamp:  metav1.Time{Time: start.Add(6 * time.Minute)},
 	}
 	return fake.NewSimpleClientset(pod, rs, dep, node, ev), podName
 }

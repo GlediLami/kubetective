@@ -1,5 +1,5 @@
 // Package action implements Phase 3/4 of the remediation model
-//: deterministic preview actions and human-approved
+// : deterministic preview actions and human-approved
 // application, with audit records appended to the incident file.
 //
 // Safety rules enforced here:

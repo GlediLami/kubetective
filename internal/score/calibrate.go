@@ -116,9 +116,9 @@ func Calibrate(points []CalibrationPoint) CalibrationReport {
 // CalibrateLOO cross-validates the temperature fit leave-one-out.
 func CalibrateLOO(points []CalibrationPoint) LOOReport {
 	rep := LOOReport{
-		DefaultECE: ece(points, DefaultTemperature),
-		FittedECE:  ece(points, DefaultTemperature),
-		LOOECE:     ece(points, DefaultTemperature),
+		DefaultECE:  ece(points, DefaultTemperature),
+		FittedECE:   ece(points, DefaultTemperature),
+		LOOECE:      ece(points, DefaultTemperature),
 		Temperature: DefaultTemperature,
 	}
 	if len(points) < 3 {

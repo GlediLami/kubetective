@@ -2,7 +2,7 @@
 // Kustomization/HelmRelease and ArgoCD Application custom resources via the
 // dynamic client and normalizes their sync/reconcile state into gitops.state
 // observations - "what the GitOps controller thinks of the workload"
-//.
+// .
 //
 // The collector is failure-tolerant: missing CRDs or missing permissions
 // become gaps, never failed investigations.

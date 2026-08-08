@@ -107,7 +107,7 @@ func TestCollectUnreachablePrometheusReturnsError(t *testing.T) {
 	c := New("http://127.0.0.1:1")
 	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "p1"}
 	_, _, err := c.Collect(context.Background(), &collect.ScopePlan{
-		Prior: []model.Observation{{ID: "obs-pod", Kind: "pod.state", Resource: pod}},
+		Prior:  []model.Observation{{ID: "obs-pod", Kind: "pod.state", Resource: pod}},
 		Window: api.Window{Start: time.Now().Add(-10 * time.Minute), End: time.Now()},
 	})
 	if err == nil {

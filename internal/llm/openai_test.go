@@ -56,7 +56,7 @@ func TestOpenAICompatibleErrors(t *testing.T) {
 	}
 	// Non-200.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"error":{"message":"rate limited"}}`, 429)
+		http.Error(w, `{"error":{"message":"rate limited"}}`, http.StatusTooManyRequests)
 	}))
 	defer srv.Close()
 	if _, err := NewOpenAICompatible(srv.URL+"/v1", "m", "").Complete(context.Background(), Request{}); err == nil {

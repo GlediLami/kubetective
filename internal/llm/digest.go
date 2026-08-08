@@ -12,11 +12,11 @@ import (
 // (especially log.snippet), secrets, kubeconfig data, and free-form payload
 // values beyond short reason strings.
 type Digest struct {
-	Incident   IncidentDigest   `json:"incident"`
+	Incident   IncidentDigest     `json:"incident"`
 	Hypotheses []HypothesisDigest `json:"hypotheses"`
-	Timeline   []TimelineDigest `json:"timeline"`
-	Changes    []ChangeDigest   `json:"changes"`
-	Gaps       []string         `json:"evidence_gaps"`
+	Timeline   []TimelineDigest   `json:"timeline"`
+	Changes    []ChangeDigest     `json:"changes"`
+	Gaps       []string           `json:"evidence_gaps"`
 }
 
 type IncidentDigest struct {
@@ -27,12 +27,12 @@ type IncidentDigest struct {
 }
 
 type HypothesisDigest struct {
-	Claim        string   `json:"claim"`
-	Category     string   `json:"category"`
-	ScorePercent int      `json:"score_percent"`
-	Evidence     []string `json:"evidence"`     // score line labels (+/-), quoted
+	Claim          string   `json:"claim"`
+	Category       string   `json:"category"`
+	ScorePercent   int      `json:"score_percent"`
+	Evidence       []string `json:"evidence"` // score line labels (+/-), quoted
 	Contradictions []string `json:"contradictions,omitempty"`
-	Missing      []string `json:"missing,omitempty"`
+	Missing        []string `json:"missing,omitempty"`
 }
 
 type TimelineDigest struct {
@@ -74,9 +74,7 @@ func BuildDigest(res *api.InvestigationResult, maxHypotheses, maxTimeline, maxCh
 			for _, line := range h.Score.Lines {
 				hd.Evidence = append(hd.Evidence, sanitize(line.Label, 140))
 			}
-			for _, m := range h.Missing {
-				hd.Missing = append(hd.Missing, m)
-			}
+			hd.Missing = append(hd.Missing, h.Missing...)
 		}
 		if len(h.Contradictions) > 0 {
 			hd.Contradictions = h.Contradictions

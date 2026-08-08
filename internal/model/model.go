@@ -271,7 +271,7 @@ type IncidentResultRecord struct {
 
 // EvidenceRequest describes evidence an analyzer would need to strengthen or
 // refute a live hypothesis — this drives the adaptive collection loop
-//. Lives in model so the collect boundary can carry it
+// . Lives in model so the collect boundary can carry it
 // without an analyze dependency.
 type EvidenceRequest struct {
 	HypothesisID string

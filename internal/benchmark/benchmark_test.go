@@ -11,9 +11,9 @@ import (
 // fakeInvestigator returns canned results — isolates the gate's assertion
 // logic from the engine.
 type fakeInvestigator struct {
-	status      string
-	findings    []model.Finding
-	hypotheses  []model.Hypothesis
+	status     string
+	findings   []model.Finding
+	hypotheses []model.Hypothesis
 }
 
 var _ api.Investigator = (*fakeInvestigator)(nil)
@@ -43,8 +43,8 @@ func TestRunScenarioPass(t *testing.T) {
 		ExpectedStatus:           "OOMKILLED",
 	}}
 	eng := &fakeInvestigator{
-		status:   "OOMKILLED",
-		findings: []model.Finding{{ID: "oom.p1", Analyzer: "oom"}},
+		status:     "OOMKILLED",
+		findings:   []model.Finding{{ID: "oom.p1", Analyzer: "oom"}},
 		hypotheses: []model.Hypothesis{scored(model.CatMemory, 0.94, 72)},
 	}
 	res, err := RunScenario(context.Background(), sc, eng)
