@@ -19,6 +19,20 @@ import (
 // default that keeps scores from saturating on typical margins.
 const DefaultTemperature = 26.0
 
+// CurrentTemperature is the engine's operating temperature. It starts at
+// DefaultTemperature and is replaced only when calibration validation adopts
+// a fitted value (see benchmark). Callers passing 0 to Sigmoid/Breakdown get
+// this value; explicit temperatures always win.
+var CurrentTemperature = DefaultTemperature
+
+// SetTemperature adopts a calibrated temperature. Only call with a
+// leave-one-out-validated fit (score.CalibrateLOO).
+func SetTemperature(t float64) {
+	if t > 0 {
+		CurrentTemperature = t
+	}
+}
+
 // DefaultLambdaMissing is the per-gap penalty applied to the margin.
 const DefaultLambdaMissing = 6.0
 
@@ -46,7 +60,7 @@ func Margin(terms []EvidenceTerm, missingCount int, lambdaMissing float64) float
 // Sigmoid maps a margin to a 0..1 assessment score.
 func Sigmoid(margin, temperature float64) float64 {
 	if temperature <= 0 {
-		temperature = DefaultTemperature
+		temperature = CurrentTemperature
 	}
 	return 1.0 / (1.0 + math.Exp(-margin/temperature))
 }
@@ -64,10 +78,11 @@ func Breakdown(h model.Hypothesis, terms []EvidenceTerm, missing int) model.Scor
 	}
 	gapPenalty := DefaultLambdaMissing * float64(missing)
 	margin := Margin(terms, missing, DefaultLambdaMissing)
+	t := CurrentTemperature
 	return model.ScoreBreakdown{
 		Margin:      margin,
-		Temperature: DefaultTemperature,
-		Score:       Sigmoid(margin, DefaultTemperature),
+		Temperature: t,
+		Score:       Sigmoid(margin, t),
 		Lines:       lines,
 		GapPenalty:  gapPenalty,
 	}

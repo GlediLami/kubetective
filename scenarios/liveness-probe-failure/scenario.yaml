@@ -1,0 +1,13 @@
+name: liveness-probe-failure
+description: >-
+  The liveness probe endpoint returns 500; kubelet kills and restarts the
+  container in a loop (exit 137). The probe hypothesis must beat the plain
+  crashloop explanation.
+ground_truth:
+  root_cause: "Liveness probe failing (HTTP 500) — kubelet restart loop"
+  top_hypothesis_category: probe
+  min_score: 0.8
+  expected_finding_analyzers:
+    - probe
+    - crashloop
+  expected_status: CRASHLOOPBACKOFF

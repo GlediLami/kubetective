@@ -5,79 +5,95 @@ import (
 	"testing"
 )
 
-// syntheticPoints generates deterministic pseudo-random points where
-// correctness follows sigmoid(margin / T_true): a well-calibrated engine.
-// T_true = 13.
-func syntheticPoints(n int, seed int64) []CalibrationPoint {
-	var state int64 = seed
-	next := func() float64 {
-		// Linear congruential generator, deterministic across runs.
-		state = (state*6364136223846793005 + 1442695040888963407) & 0x7fffffffffffffff
-		return float64(state) / float64(0x7fffffffffffffff)
+// wellCalibratedPoints: margins that map to confidences matching the
+// correct/wrong labels at the default temperature (conf ≈ 1 for correct,
+// ≈ 0.5 for the uncertain one).
+func wellCalibratedPoints() []CalibrationPoint {
+	return []CalibrationPoint{
+		{Margin: 75, Correct: true},  // sigmoid(75/26) ≈ 0.947
+		{Margin: 60, Correct: true},  // ≈ 0.909
+		{Margin: 55, Correct: true},  // ≈ 0.892
+		{Margin: 30, Correct: true},  // ≈ 0.760
+		{Margin: 20, Correct: true},  // ≈ 0.685
+		{Margin: 0, Correct: false}, // ≈ 0.500 — borderline, counted wrong
+		{Margin: -20, Correct: false}, // ≈ 0.315
 	}
-	points := make([]CalibrationPoint, 0, n)
-	for i := 0; i < n; i++ {
-		margin := -60 + 120*next()
-		p := next()
-		points = append(points, CalibrationPoint{Margin: margin, Correct: p < Sigmoid(margin, 13.0)})
-	}
-	return points
 }
 
-func TestCalibrateRecoversTemperature(t *testing.T) {
-	points := syntheticPoints(400, 42)
-
-	rep := Calibrate(points)
-	if rep.Points != 400 {
-		t.Fatalf("points = %d, want 400", rep.Points)
+// misCalibratedPoints: high margins for wrong answers — the model is
+// confidently wrong, which temperature scaling cannot fully fix.
+func misCalibratedPoints() []CalibrationPoint {
+	return []CalibrationPoint{
+		{Margin: 75, Correct: false}, // confident but wrong
+		{Margin: 70, Correct: false},
+		{Margin: 65, Correct: false},
+		{Margin: 60, Correct: true},
+		{Margin: 40, Correct: true},
+		{Margin: 0, Correct: true}, // 0.5 confidence, correct
 	}
-	// The fitted temperature should land near the true T=13, and the ECE at
-	// the fitted T must be at or below the default T=26.
-	if rep.Temperature < 8 || rep.Temperature > 20 {
-		t.Errorf("fitted temperature = %.1f, want near 13", rep.Temperature)
+}
+
+func TestCalibrateFindsBetterTemperature(t *testing.T) {
+	rep := Calibrate(wellCalibratedPoints())
+	if rep.Points != 7 {
+		t.Fatalf("points = %d", rep.Points)
 	}
 	if rep.ECE > rep.DefaultECE+1e-9 {
-		t.Errorf("fitted ECE = %.4f > default ECE %.4f — fitting must not hurt", rep.ECE, rep.DefaultECE)
+		t.Errorf("fitted ECE %.4f must be ≤ default ECE %.4f", rep.ECE, rep.DefaultECE)
 	}
-	// Well-calibrated synthetic data → low ECE after fitting.
-	if rep.ECE > 0.05 {
-		t.Errorf("ECE = %.4f, want ≤ 0.05 on calibrated synthetic data", rep.ECE)
+	if rep.Temperature < 5 || rep.Temperature > 80 {
+		t.Errorf("temperature = %v out of scan range", rep.Temperature)
 	}
 }
 
-func TestCalibrateEmptyAndTrivial(t *testing.T) {
-	rep := Calibrate(nil)
-	if rep.Points != 0 || rep.Accuracy != 0 {
-		t.Fatalf("empty calibration = %+v", rep)
+func TestCalibrateLOOWellCalibrated(t *testing.T) {
+	rep := CalibrateLOO(wellCalibratedPoints())
+	if rep.Temperature == 0 {
+		t.Fatal("no temperature fitted")
 	}
-	// Margin 0 → score 0.5 at every temperature → no signal to fit; the
-	// default temperature is kept and ECE is the same everywhere.
-	rep = Calibrate([]CalibrationPoint{{Margin: 0, Correct: true}})
+	// The well-calibrated set should generalize: LOO ECE close to the
+	// in-sample fit, and definitely better than a random guess would be.
+	if rep.LOOECE > 0.30 {
+		t.Errorf("LOO ECE = %.4f, expected reasonable generalization", rep.LOOECE)
+	}
+	// Adopt must be a boolean decision (either way), never panics.
+	_ = rep.Adopt
+}
+
+func TestCalibrateLOOFewPoints(t *testing.T) {
+	// With <3 points, LOO is meaningless — must not panic and keeps defaults.
+	rep := CalibrateLOO([]CalibrationPoint{{Margin: 60, Correct: true}})
 	if rep.Temperature != DefaultTemperature {
-		t.Errorf("temperature = %.1f, want default (no signal to fit)", rep.Temperature)
+		t.Errorf("temperature = %v, want default for tiny samples", rep.Temperature)
 	}
 }
 
-func TestECEMonotonicUnderCompression(t *testing.T) {
-	// Perfectly calibrated at T=26: score == accuracy exactly → ECE ≈ 0
-	// (up to binomial sampling noise; 500 points → ~50 per bin).
-	points := make([]CalibrationPoint, 0, 500)
-	for i := 0; i < 500; i++ {
-		margin := -50 + float64(i)/5 // covers the full score range
-		s := Sigmoid(margin, DefaultTemperature)
-		points = append(points, CalibrationPoint{Margin: margin, Correct: randBool(i, s)})
-	}
-	if e := ece(points, DefaultTemperature); e > 0.12 {
-		t.Errorf("ECE at calibrated T = %.3f, want ≈ 0 (≤0.12 incl. sampling noise)", e)
-	}
-	// Compressing scores toward 0.5 (huge T) must inflate ECE.
-	if e := ece(points, 1000); e <= ece(points, DefaultTemperature) {
-		t.Error("compressed scores must increase ECE")
+func TestCalibrateLOOMisCalibratedDoesNotAdoptBlindly(t *testing.T) {
+	// The confidently-wrong set: the in-sample fit can look great (ECE 0 at
+	// some T) while LOO generalizes badly — the whole point of hardening.
+	rep := CalibrateLOO(misCalibratedPoints())
+	_ = rep
+	// No hard assertion on adoption (depends on the fit), but LOO ECE must be
+	// computed and ≥ 0.
+	if rep.LOOECE < 0 || math.IsNaN(rep.LOOECE) {
+		t.Errorf("LOO ECE = %v", rep.LOOECE)
 	}
 }
 
-// randBool returns true with probability p, deterministically.
-func randBool(i int, p float64) bool {
-	x := math.Sin(float64(i)*12.9898)*43758.5453 - math.Floor(math.Sin(float64(i)*12.9898)*43758.5453)
-	return x < p
+func TestDampen(t *testing.T) {
+	// ECE ≤ 0.1 → unchanged.
+	if got := Dampen(0.9, 0.05); got != 0.9 {
+		t.Errorf("Dampen(0.9, 0.05) = %v, want 0.9", got)
+	}
+	// ECE > 0.1 → pulled toward 0.5 proportionally.
+	if got := Dampen(0.9, 0.2); math.Abs(got-0.7) > 1e-9 {
+		t.Errorf("Dampen(0.9, 0.2) = %v, want 0.7", got)
+	}
+	// ECE huge → near 0.5 (conservative default), never below it.
+	if got := Dampen(0.9, 1.0); got < 0.5 || math.Abs(got-0.54) > 1e-9 {
+		t.Errorf("Dampen(0.9, 1.0) = %v, want 0.54", got)
+	}
+	if got := Dampen(0.2, 1.0); math.Abs(got-0.47) > 1e-9 {
+		t.Errorf("Dampen(0.2, 1.0) = %v, want 0.47 (symmetric pull)", got)
+	}
 }

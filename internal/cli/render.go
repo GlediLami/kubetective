@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
+	"github.com/kubedoctor/kubedoctor/internal/config"
 	"github.com/kubedoctor/kubedoctor/internal/llm"
 	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/kubedoctor/kubedoctor/internal/score"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
@@ -169,13 +171,39 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 	if c := suite.Calibration; c != nil {
 		fmt.Fprintf(w, "calibration: %d ground-truth points, accuracy %.0f%% — ECE %.1f%% @T=26 → ECE %.1f%% @T=%.1f\n",
 			c.Points, c.Accuracy*100, c.DefaultECE*100, c.ECE*100, c.Temperature)
+		if l := suite.LOO; l != nil {
+			adopt := "not adopted"
+			if l.Adopt && c.Points >= 10 {
+				adopt = "adopted — persisted to " + config.Path()
+				if err := config.Save(config.Config{Temperature: l.Temperature}); err == nil {
+					score.SetTemperature(l.Temperature)
+				}
+			}
+			fmt.Fprintf(w, "  hardening: LOO ECE %.1f%% (vs %.1f%% @T=26) → recalibrated T=%.1f %s\n",
+				l.LOOECE*100, l.DefaultECE*100, l.Temperature, adopt)
+		}
+		// docs/DESIGN.md §9.4: ECE > 0.1 → displayed confidence is dampened
+		// toward the conservative 50% default.
+		if c.DefaultECE > 0.10 {
+			fmt.Fprintf(w, "  warning: ECE %.1f%% exceeds 10%% — displayed confidence dampened toward 50%% (score.Dampen)\n", c.DefaultECE*100)
+		}
 		if c.Points < 10 {
-			fmt.Fprintf(w, "  (advisory: <10 points — the fitted temperature is not yet trustworthy; the benchmark gate still uses the default T=26)\n")
+			fmt.Fprintf(w, "  (advisory: <10 points — the fitted temperature is not yet trustworthy; adoption is skipped below 10 points)\n")
 		}
 	}
 
 	if passed != total {
 		return fmt.Errorf("benchmark gate: %d scenario(s) failed", total-passed)
+	}
+
+	// Calibration hardening: adopt a leave-one-out-validated temperature
+	// (docs/DESIGN.md §9.4), persisted for every future invocation — but only
+	// when the gate passed, so a failing suite never mutates engine config.
+	if c := suite.Calibration; c != nil && suite.LOO != nil && suite.LOO.Adopt && c.Points >= 10 {
+		if err := config.Save(config.Config{Temperature: suite.LOO.Temperature}); err == nil {
+			score.SetTemperature(suite.LOO.Temperature)
+			fmt.Fprintf(w, "adopted calibrated temperature T=%.1f (persisted to %s)\n", suite.LOO.Temperature, config.Path())
+		}
 	}
 	return nil
 }

@@ -1,18 +1,16 @@
 # KubeDoctor — Kubernetes Incident Investigation Engine
 
-> **Status: v0.6 — complete.** REST API + server mode (`kubedoctor serve`:
-> `POST /v1/investigate`, `GET /v1/incidents[/{id}]`, `GET /healthz`), MCP
-> server over stdio (`kubedoctor mcp`: investigate/replay/list_incidents/
-> read_incident/action_preview — read-only, remediation stays human-gated),
-> preview actions + human approval (`kubedoctor action <incident-id>`
-> preview → `--apply <id> --yes`), and audit records appended to the
-> incident file (user, timestamp, resource, arguments, evidence, risk,
-> approval, result). Rollback = rollout-undo equivalent (full template
-> replace via Update, verified live on kind). Plus v0.1–v0.5: evidence
-> model, k8s/git/GitOps/Prometheus collectors, 11 analyzers, timeline,
-> graph, change detector, adaptive collection, hypothesis engine, scoring +
-> calibration, record/replay, LLM explainer (digest-only), 13-scenario
-> benchmark (accuracy 100%). Next: v0.7 scenario suite expansion + eval CI.
+> **Status: v0.7 — complete.** Expanded suite (15 scenarios), DNS analyzer
+> (coreDNS-down + DNS-event evidence, live kube-system fetch), liveness-probe
+> scenario, `kubedoctor evaluate` (markdown evaluation report: per-scenario,
+> per-category accuracy, false-positive check — CI gate), and calibration
+> hardening: leave-one-out temperature validation with real adoption — the
+> fitted T is persisted to `~/.kubedoctor/config.json` and every invocation
+> (CLI, plugin, server, MCP) scores at it (currently T=5.0, LOO-validated).
+> Plus v0.1–v0.6: evidence model, k8s/git/GitOps/Prometheus collectors, 12
+> analyzers, timeline, graph, change detector, adaptive collection,
+> hypothesis engine, scoring + calibration, record/replay, REST + MCP
+> servers, preview actions + human approval, audit records, LLM explainer.
 > Design: [`docs/DESIGN.md`](docs/DESIGN.md).
 
 KubeDoctor is an open-source Kubernetes incident investigation engine: given a target
@@ -67,6 +65,7 @@ recorded incident you can replay (`kubedoctor replay <incident-id>`).
 | v0.4 | ✅ Git + Flux/ArgoCD collectors, config-regression analyzer, risk-leveled recommendations |
 | v0.5 | ✅ LLM explainer: digest-only (redacted), OpenAI-compatible providers, constraint prompt, validated JSON output, AI SYNTHESIS rendering |
 | v0.6 | ✅ REST server + API, MCP server (read-only tools), preview actions + human approval, action audit records |
+| v0.7 | ✅ 15-scenario suite, DNS analyzer, `evaluate` report (CI gate), calibration hardening: LOO-validated T adoption (persisted config) |
 | v0.6+ | REST, MCP server, preview + approved actions, incident memory |
 
 Full roadmap: [`docs/DESIGN.md`](docs/DESIGN.md#21-roadmap).

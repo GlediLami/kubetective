@@ -1,0 +1,13 @@
+name: dns-failure
+description: >-
+  coreDNS is scaled but has 0 available replicas; the workload's pods cannot
+  create sandboxes (FailedToCreatePodSandBox, 'no such host') and crash-loop.
+  The DNS hypothesis must beat the plain crashloop explanation.
+ground_truth:
+  root_cause: "coreDNS down — pods cannot resolve names and crash-loop"
+  top_hypothesis_category: dns
+  min_score: 0.8
+  expected_finding_analyzers:
+    - dns
+    - crashloop
+  expected_status: CRASHLOOPBACKOFF

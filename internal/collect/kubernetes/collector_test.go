@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
 
+	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/collect"
 	"github.com/kubedoctor/kubedoctor/internal/model"
 	"github.com/kubedoctor/kubedoctor/pkg/api"
@@ -293,3 +294,56 @@ func TestCollectPvcServiceHPAObservations(t *testing.T) {
 func boolPtr(b bool) *bool { return &b }
 
 func int32Ptr(v int32) *int32 { return &v }
+
+func TestCollectCoreDNSAvailability(t *testing.T) {
+	ns := "prod"
+	pod := fakePod(t, ns, "checkout-7f84c9")
+	coredns := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: "coredns", Namespace: "kube-system",
+			CreationTimestamp: metav1.Time{Time: time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC)}},
+		Status: appsv1.DeploymentStatus{Replicas: 2, AvailableReplicas: 0},
+	}
+	client := fake.NewSimpleClientset(pod, coredns)
+	c := New(client)
+	obs, _, err := c.Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{{Kind: "pod", Namespace: ns, Name: "checkout-7f84c9"}},
+		Window: api.Window{
+			Start: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC),
+			End:   time.Date(2026, 8, 7, 15, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	var corednsObs []model.Observation
+	for _, o := range obs {
+		if o.Kind == "deployment.state" && o.Resource.Namespace == "kube-system" {
+			corednsObs = append(corednsObs, o)
+		}
+	}
+	if len(corednsObs) != 1 {
+		t.Fatalf("kube-system deployment.state = %d, want 1 (coredns)", len(corednsObs))
+	}
+	avail, ok := analyze.PayloadInt64(corednsObs[0].Payload, "available_replicas")
+	if !ok || avail != 0 {
+		t.Errorf("coredns available_replicas = %v, want 0", corednsObs[0].Payload["available_replicas"])
+	}
+}
+
+func TestCollectSkipsMissingCoreDNS(t *testing.T) {
+	ns := "prod"
+	pod := fakePod(t, ns, "checkout-7f84c9")
+	// No kube-system deployments in the fake — the collector must not fail.
+	client := fake.NewSimpleClientset(pod)
+	c := New(client)
+	_, _, err := c.Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{{Kind: "pod", Namespace: ns, Name: "checkout-7f84c9"}},
+		Window: api.Window{
+			Start: time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC),
+			End:   time.Date(2026, 8, 7, 15, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Collect without coredns must not fail: %v", err)
+	}
+}

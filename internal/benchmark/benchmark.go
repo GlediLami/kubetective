@@ -50,9 +50,14 @@ type Result struct {
 	Status        string
 	// Margin and Correct feed confidence calibration (docs/DESIGN.md §9.4):
 	// did the top hypothesis match ground truth, and at what margin?
-	Margin  float64
-	Correct bool
-	HasTruth bool
+	Margin           float64
+	Correct          bool
+	HasTruth         bool
+	ExpectedCategory string // ground-truth top hypothesis category (per-category accuracy)
+	// False-positive gate bookkeeping: did this scenario expect silence, and
+	// did the engine produce findings anyway?
+	ExpectNoFindings bool
+	FoundFindings    bool
 }
 
 func (r *Result) Fail(format string, args ...any) {
@@ -107,6 +112,7 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 				res.HasTruth = true
 				res.Margin = top.Score.Margin
 				res.Correct = string(top.Category) == gt.TopHypothesisCategory
+				res.ExpectedCategory = gt.TopHypothesisCategory
 			}
 			if gt.TopHypothesisCategory != "" && string(top.Category) != gt.TopHypothesisCategory {
 				res.Fail("top hypothesis category = %s, want %s", top.Category, gt.TopHypothesisCategory)
@@ -125,6 +131,8 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 		}
 	}
 	if gt.ExpectNoFindings {
+		res.ExpectNoFindings = true
+		res.FoundFindings = len(out.Findings) > 0 || len(out.Hypotheses) > 0
 		if len(out.Findings) != 0 {
 			res.Fail("expected no findings, got %d (false positive): %v", len(out.Findings), findingTitles(out.Findings))
 		}
@@ -171,6 +179,15 @@ func hasAnalyzer(fs []model.Finding, id string) bool {
 type SuiteResult struct {
 	Results     []Result
 	Calibration *score.CalibrationReport // nil when no scenario carries truth
+	LOO         *score.LOOReport         // leave-one-out validation of the fit (v0.7)
+}
+
+// CategoryAccuracy is the top-1 category accuracy per ground-truth category.
+type CategoryAccuracy struct {
+	Category  string
+	Correct   int
+	Total     int
+	Accuracy  float64
 }
 
 // EngineFactory builds an engine with the given collectors wired (plus the
@@ -221,6 +238,50 @@ func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (
 	if len(points) > 0 {
 		rep := score.Calibrate(points)
 		out.Calibration = &rep
+		loo := score.CalibrateLOO(points)
+		out.LOO = &loo
 	}
 	return out, nil
+}
+
+// ByCategory groups truth-carrying results by their expected category.
+func (s *SuiteResult) ByCategory() []CategoryAccuracy {
+	groups := map[string]*CategoryAccuracy{}
+	var order []string
+	for _, r := range s.Results {
+		if !r.HasTruth || r.ExpectedCategory == "" {
+			continue
+		}
+		if groups[r.ExpectedCategory] == nil {
+			groups[r.ExpectedCategory] = &CategoryAccuracy{Category: r.ExpectedCategory}
+			order = append(order, r.ExpectedCategory)
+		}
+		g := groups[r.ExpectedCategory]
+		g.Total++
+		if r.Correct {
+			g.Correct++
+		}
+	}
+	sort.Strings(order)
+	out := make([]CategoryAccuracy, 0, len(order))
+	for _, c := range order {
+		g := groups[c]
+		if g.Total > 0 {
+			g.Accuracy = float64(g.Correct) / float64(g.Total)
+		}
+		out = append(out, *g)
+	}
+	return out
+}
+
+// FalsePositiveCount counts scenarios that were expected to stay silent but
+// produced findings (the healthy control gate).
+func (s *SuiteResult) FalsePositiveCount() int {
+	n := 0
+	for _, r := range s.Results {
+		if r.ExpectNoFindings && r.FoundFindings {
+			n++
+		}
+	}
+	return n
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/analyze"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/configregression"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
+	"github.com/kubedoctor/kubedoctor/internal/analyze/dns"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/hpa"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/nodepressure"
@@ -25,6 +26,8 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
 	"github.com/kubedoctor/kubedoctor/internal/analyze/service"
 	"github.com/kubedoctor/kubedoctor/internal/benchmark"
+	"github.com/kubedoctor/kubedoctor/internal/config"
+	"github.com/kubedoctor/kubedoctor/internal/score"
 	"k8s.io/client-go/dynamic"
 
 	"github.com/kubedoctor/kubedoctor/internal/collect"
@@ -41,6 +44,9 @@ import (
 
 // Execute runs the root command and exits with a non-zero code on failure.
 func Execute() {
+	if cfg, err := config.Load(); err == nil && cfg.Temperature > 0 {
+		score.SetTemperature(cfg.Temperature)
+	}
 	root := newRoot()
 	// kubectl plugin invocation: `kubectl investigate <target>` runs
 	// `kubectl-investigate <target>`, so the first positional argument is the
@@ -91,6 +97,7 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	root.AddCommand(newBenchmarkCmd())
 	root.AddCommand(newDoctorCmd())
 	root.AddCommand(newVersionCmd())
+	root.AddCommand(newEvaluateCmd())
 	root.AddCommand(newServeCmd())
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newIncidentsCmd())
@@ -111,6 +118,7 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 	ar.Register(scheduling.New())
 	ar.Register(nodepressure.New())
 	ar.Register(probe.New())
+	ar.Register(dns.New())
 	ar.Register(pvc.New())
 	ar.Register(service.New())
 	ar.Register(hpa.New())

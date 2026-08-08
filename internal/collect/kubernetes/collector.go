@@ -65,6 +65,17 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 		obs = append(obs, o...)
 		refs = append(refs, r...)
 	}
+	// coreDNS availability (DNS-failure evidence): cheap and always fetched
+	// when RBAC allows; skipped silently otherwise (like the GitOps CRDs).
+	for _, name := range []string{"coredns", "kube-dns"} {
+		dep, err := c.client.AppsV1().Deployments("kube-system").Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			continue // not found or no RBAC — the DNS analyzer reports a gap-free lower score
+		}
+		res := model.ResourceRef{Kind: "deployment", Namespace: "kube-system", Name: dep.Name}
+		ref := model.SourceRef{System: "k8s", Query: "GET deployments/" + name}
+		obs = append(obs, deploymentStateObservation(dep, res, ref))
+	}
 	// Dedup at the boundary: overlapping scope expansion (e.g. deployment
 	// state fetched both directly and via the pod owner chain) emits the same
 	// content-hashed observation twice — collapse before handing over.
