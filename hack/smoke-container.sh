@@ -139,23 +139,36 @@ run_job kt-investigate investigate deployment/crashy --namespace "$WORK_NS" --si
 kubectl wait --for=condition=complete job/kt-investigate --namespace "$NS" --timeout=300s
 kubectl logs job/kt-investigate --namespace "$NS" > /tmp/kt-investigate.out
 
-echo "== job: investigate pod/$CRASHY_POD (actions chain target)"
-run_job kt-investigate-pod investigate "pod/$CRASHY_POD" --namespace "$WORK_NS" --since 10m --format json
-kubectl wait --for=condition=complete job/kt-investigate-pod --namespace "$NS" --timeout=300s
-kubectl logs job/kt-investigate-pod --namespace "$NS" > /tmp/kt-investigate-pod.out
+echo "== job: investigate pod/$CRASHY_POD (actions chain target, retried into the crash state)"
+# A crash-looping pod oscillates between Running and CrashLoopBackOff; the
+# action planner only recommends restart-pod for a record whose incident
+# status shows the bad state. Retry the investigation until the captured
+# record shows it (Plan() is pure, so the preview is then deterministic).
+ACT_ID=""
+POD_INCIDENT_ID=""
+for attempt in $(seq 1 5); do
+  run_job "kt-investigate-pod-${attempt}" investigate "pod/$CRASHY_POD" \
+    --namespace "$WORK_NS" --since 10m --format json
+  kubectl wait --for=condition=complete "job/kt-investigate-pod-${attempt}" --namespace "$NS" --timeout=300s
+  kubectl logs "job/kt-investigate-pod-${attempt}" --namespace "$NS" > /tmp/kt-investigate-pod.out
 
-# The pod-target record is the substrate for the actions E2E.
-POD_INCIDENT_ID=$(grep -o '"record_id": *"[^"]*"' /tmp/kt-investigate-pod.out \
-  | head -1 | sed 's/.*"record_id": *"//;s/"$//' | sed 's#.*/##;s/\.jsonl$//')
-[ -n "$POD_INCIDENT_ID" ] || { echo "SMOKE FAIL: no record_id in pod investigation" >&2; exit 1; }
+  POD_INCIDENT_ID=$(grep -o '"record_id": *"[^"]*"' /tmp/kt-investigate-pod.out \
+    | head -1 | sed 's/.*"record_id": *"//;s/"$//' | sed 's#.*/##;s/\.jsonl$//')
+  [ -n "$POD_INCIDENT_ID" ] || { echo "SMOKE FAIL: no record_id in pod investigation" >&2; exit 1; }
 
-echo "== job: action preview"
-run_job kt-actions-preview action "$POD_INCIDENT_ID"
-kubectl wait --for=condition=complete job/kt-actions-preview --namespace "$NS" --timeout=180s
-kubectl logs job/kt-actions-preview --namespace "$NS" > /tmp/kt-actions-preview.out
-ACT_ID=$(awk '/restart-pod/{print $1}' /tmp/kt-actions-preview.out | head -1)
-ACT_TYPE=$(awk '/restart-pod/{print $2}' /tmp/kt-actions-preview.out | head -1)
-[ -n "$ACT_ID" ] || { echo "SMOKE FAIL: preview planned no restart-pod action" >&2; exit 1; }
+  run_job "kt-actions-preview-${attempt}" action "$POD_INCIDENT_ID"
+  kubectl wait --for=condition=complete "job/kt-actions-preview-${attempt}" --namespace "$NS" --timeout=180s
+  kubectl logs "job/kt-actions-preview-${attempt}" --namespace "$NS" > /tmp/kt-actions-preview.out
+  ACT_ID=$(awk '/restart-pod/{print $1}' /tmp/kt-actions-preview.out | head -1)
+  if [ -n "$ACT_ID" ]; then
+    echo "  attempt ${attempt}: record ${POD_INCIDENT_ID} plans restart-pod"
+    break
+  fi
+  echo "  attempt ${attempt}: record showed no crash state yet, retrying in 15s"
+  kubectl delete job "kt-investigate-pod-${attempt}" "kt-actions-preview-${attempt}" --namespace "$NS" >/dev/null 2>&1 || true
+  sleep 15
+done
+[ -n "$ACT_ID" ] || { echo "SMOKE FAIL: preview planned no restart-pod action (5 tries)" >&2; exit 1; }
 
 echo "== job: apply without --yes must be rejected (gate)"
 run_job kt-actions-gate action "$POD_INCIDENT_ID" --apply "$ACT_ID"
