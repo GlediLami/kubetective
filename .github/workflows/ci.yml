@@ -67,3 +67,18 @@ jobs:
 
       - name: Version consistency
         run: hack/check-version.sh
+
+  # The uninstall test (v1.0): a fresh operator follows the documented
+  # path - fresh clone, make build, offline benchmark - and `doctor`
+  # without a cluster fails with an actionable message, not a trace.
+  uninstall-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Fresh-clone install + failure modes
+        run: hack/uninstall-test.sh
