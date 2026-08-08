@@ -8,7 +8,20 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ### Added
 
-- `v0.9` - Config file (`kubetective.yaml` in the state dir): kubeconfig,
+- `v0.8` - Loki log collector (`--loki-url` / `KUBETECTIVE_LOKI_URL`):
+  log evidence for the adaptive loop from Loki, silent degradation;
+  incident memory v1 (`kubetective incidents similar <id>`, Jaccard
+  overlap of failure shapes, "seen this before" note on every
+  investigation); read-only web UI (`kubetective serve`: `GET /`,
+  `GET /incidents/{id}`); self-telemetry (`GET /metrics`, expvar);
+  GitHub Actions CI (build/vet/test/benchmark/evaluate gates);
+  `dns-events-only` scenario (suite: 16 scenarios).
+
+## [0.9] - 2026-08-08
+
+### Added
+
+- Config file (`kubetective.yaml` in the state dir): kubeconfig,
   context, namespace, since, prometheus/loki URLs, git repo, cluster id,
   LLM provider settings. Precedence: CLI flag > env var > config file
   > default. Known env vars: `KUBETECTIVE_HOME`, `KUBECTIVE_PROMETHEUS`,
@@ -42,15 +55,6 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
   longer drift).
 - README advertised a 12th analyzer that does not exist; corrected to
   11 (per-analyzer table still authoritative).
-
-- `v0.8` - Loki log collector (`--loki-url` / `KUBETECTIVE_LOKI_URL`):
-  log evidence for the adaptive loop from Loki, silent degradation;
-  incident memory v1 (`kubetective incidents similar <id>`, Jaccard
-  overlap of failure shapes, "seen this before" note on every
-  investigation); read-only web UI (`kubetective serve`: `GET /`,
-  `GET /incidents/{id}`); self-telemetry (`GET /metrics`, expvar);
-  GitHub Actions CI (build/vet/test/benchmark/evaluate gates);
-  `dns-events-only` scenario (suite: 16 scenarios).
 
 ## [0.7] - 2026-08-08
 
