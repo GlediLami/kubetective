@@ -171,6 +171,8 @@ prometheus_url: http://localhost:9090
 loki_url: http://localhost:3100
 git_repo: ~/code/payments-manifests
 cluster_id: prod-eu # optional: override the auto-derived cluster identity
+# webhook_url: https://ops.example.com/kubetective-hook   # opt-in completion notification
+# webhook_secret: s3cret                                # HMAC key for the notification signature
 llm:
   provider: openai      # or ollama, vllm, llama.cpp
   model: gpt-4o-mini
@@ -204,6 +206,10 @@ Precedence is CLI flag > environment variable > per-context profile
 | `KUBETECTIVE_LLM_MODEL` | LLM model name for the explainer |
 | `KUBETECTIVE_LLM_BASE_URL` | OpenAI-compatible API base URL (default `https://api.openai.com/v1`) |
 | `KUBETECTIVE_LLM_API_KEY` | API key (local servers like Ollama don't need one) |
+| `KUBETECTIVE_WEBHOOK_URL` | POST a signed completion notification after every investigation (opt-in) |
+| `KUBETECTIVE_WEBHOOK_SECRET` | Shared HMAC secret; the webhook body is signed with it (verify on the receiver side) |
+| `KUBETECTIVE_LOG_FORMAT` | Structured logs to stderr: `json` or `text` (off unless set; same as `--log-format`) |
+| `KUBETECTIVE_LOG_LEVEL` | Log level: `debug`, `info`, `warn` (default `info`) |
 | `KUBETECTIVE_HOME` | State directory (default `~/.kubetective`: incidents, config) |
 | `KUBETECTIVE_CONFIG` | Config file path (default `~/.kubetective/config.json`) |
 

@@ -5,11 +5,13 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/GlediLami/kubetective/internal/engine"
+	"github.com/GlediLami/kubetective/internal/logging"
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/record"
 	"github.com/GlediLami/kubetective/pkg/api"
@@ -145,10 +147,36 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// withLogging emits the access line. Text mode prints the historic line to
+// stdout; structured mode (KUBETECTIVE_LOG_FORMAT / --log-format) logs to
+// slog instead, keeping stdout free for the web UI's needs.
 func withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		next.ServeHTTP(w, r)
-		fmt.Printf("%s %s %s (%s)\n", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		dur := time.Since(start)
+		if logging.Enabled() {
+			slog.Info("request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"remote", r.RemoteAddr,
+				"status", rec.status,
+				"duration_ms", dur.Milliseconds(),
+			)
+			return
+		}
+		fmt.Printf("%s %s %s (%s)\n", r.Method, r.URL.Path, r.RemoteAddr, dur.Round(time.Millisecond))
 	})
+}
+
+// statusRecorder captures the response status for logging.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
 }

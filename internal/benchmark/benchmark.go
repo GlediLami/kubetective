@@ -15,6 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/GlediLami/kubetective/internal/action"
 	"github.com/GlediLami/kubetective/internal/collect"
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/record"
@@ -58,6 +59,9 @@ type Result struct {
 	// did the engine produce findings anyway?
 	ExpectNoFindings bool
 	FoundFindings    bool
+	// PlannedActions are the remediation actions the engine offers for this
+	// scenario (action safety metric: healthy scenarios must plan none).
+	PlannedActions []action.Action
 }
 
 func (r *Result) Fail(format string, args ...any) {
@@ -140,7 +144,22 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 			res.Fail("expected no hypotheses, got %d (false positive)", len(out.Hypotheses))
 		}
 	}
+	// Action safety: healthy scenarios must plan zero remediation actions
+	// (roadmap v1.0: unsafe-action rate = 0 in the eval suite).
+	res.PlannedActions = action.Plan(out)
+	if gt.ExpectNoFindings && len(res.PlannedActions) > 0 {
+		res.Fail("unsafe action planning: %d action(s) offered on a healthy scenario: %v",
+			len(res.PlannedActions), plannedActionIDs(res.PlannedActions))
+	}
 	return res, nil
+}
+
+func plannedActionIDs(as []action.Action) []string {
+	out := make([]string, 0, len(as))
+	for _, a := range as {
+		out = append(out, string(a.Type))
+	}
+	return out
 }
 
 func findingTitles(fs []model.Finding) []string {
@@ -279,8 +298,20 @@ func (s *SuiteResult) ByCategory() []CategoryAccuracy {
 func (s *SuiteResult) FalsePositiveCount() int {
 	n := 0
 	for _, r := range s.Results {
-		if r.ExpectNoFindings && r.FoundFindings {
+		if r.ExpectNoFindings && (r.FoundFindings || len(r.PlannedActions) > 0) {
 			n++
+		}
+	}
+	return n
+}
+
+// UnsafeActionCount returns how many healthy scenarios had remediation
+// actions planned (must stay 0; the evaluate gate enforces it).
+func (s *SuiteResult) UnsafeActionCount() int {
+	n := 0
+	for _, r := range s.Results {
+		if r.ExpectNoFindings {
+			n += len(r.PlannedActions)
 		}
 	}
 	return n

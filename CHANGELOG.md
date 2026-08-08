@@ -38,6 +38,21 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 - CLI target parsing accepts fully-qualified `kind/namespace/name`
   targets, the form incident records store - replay and action previews
   of namespaced incidents now resolve correctly.
+- Completion webhook, opt-in and HMAC-secured: `webhook_url` +
+  `webhook_secret` in `kubetective.yaml` (or `KUBETECTIVE_WEBHOOK_URL` /
+  `KUBETECTIVE_WEBHOOK_SECRET`) POSTs a signed notification after every
+  investigation. The signature travels in `X-Kubetective-Signature`
+  (HMAC-SHA256 of the raw body); receivers must verify before parsing.
+  Notification failure never fails the investigation.
+- Structured logs (operational maturity): `--log-format json|text`
+  (or `KUBETECTIVE_LOG_FORMAT`) emits slog records to stderr for
+  investigations, HTTP requests (`kubetective serve`), and action
+  applies. Logging is opt-in: output is byte-identical when off.
+- Evaluation report is now a committed artifact
+  (`reports/evaluation/latest.md`, `make report`): the Action safety
+  section lists the planned remediation actions per scenario, and the
+  evaluate gate fails if any action is ever planned for a healthy
+  scenario (unsafe-action rate = 0).
 
 ### Fixed
 

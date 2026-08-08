@@ -6,6 +6,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,8 +41,10 @@ import (
 	"github.com/GlediLami/kubetective/internal/diag"
 	"github.com/GlediLami/kubetective/internal/engine"
 	"github.com/GlediLami/kubetective/internal/llm"
+	"github.com/GlediLami/kubetective/internal/logging"
 	"github.com/GlediLami/kubetective/internal/memory"
 	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/notify"
 	"github.com/GlediLami/kubetective/internal/record"
 	"github.com/GlediLami/kubetective/pkg/api"
 )
@@ -104,9 +107,16 @@ func isKnownCommand(arg string) bool {
 }
 
 func newRoot() *cobra.Command {
+	var logFormat, logLevel string
 	root := &cobra.Command{
 		Use:   "kubetective",
 		Short: "KubeTective - Kubernetes incident investigation engine",
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Structured logs (v1.0 ops): opt-in, env or flag; text default.
+			logFormat = firstNonEmptyFlag(cmd, "log-format", os.Getenv("KUBETECTIVE_LOG_FORMAT"))
+			logLevel = firstNonEmptyFlag(cmd, "log-level", os.Getenv("KUBETECTIVE_LOG_LEVEL"))
+			logging.Configure(logFormat, logLevel)
+		},
 		Long: `KubeTective investigates Kubernetes incidents: it collects facts, builds a
 timeline and evidence graph, generates hypotheses, and renders an
 evidence-backed explanation. Deterministic first, AI second.
@@ -128,7 +138,18 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newIncidentsCmd())
 	root.AddCommand(newActionCmd())
+	root.PersistentFlags().StringVar(&logFormat, "log-format", "", "structured logging: json | text (off unless set; KUBETECTIVE_LOG_FORMAT)")
+	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: debug | info | warn (KUBETECTIVE_LOG_LEVEL)")
 	return root
+}
+
+// firstNonEmptyFlag favors the CLI flag when the user changed it, else env.
+func firstNonEmptyFlag(cmd *cobra.Command, flag, env string) string {
+	if cmd.Flags().Changed(flag) {
+		v, _ := cmd.Flags().GetString(flag)
+		return v
+	}
+	return env
 }
 
 // newEngine wires the v0.2 analyzer set with the given collectors.
@@ -252,6 +273,37 @@ func newInvestigateCmd() *cobra.Command {
 			inc := record.BuildIncident(engine.Version, req, res, clusterID)
 			if path, serr := store.Save(inc); serr == nil {
 				res.Meta.RecordID = path
+			}
+			slog.Info("investigation completed",
+				"target", target.String(),
+				"incident_id", filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
+				"cluster_id", clusterID,
+				"duration_ms", res.Meta.Duration.Milliseconds(),
+				"findings", len(res.Findings),
+				"record_id", res.Meta.RecordID,
+			)
+			// Opt-in completion webhook (v1.0 integration surface): fires
+			// after the investigation completes; HMAC-signed when a secret
+			// is configured. Never fails the investigation.
+			if url := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_URL"), st.WebhookURL); url != "" {
+				n := notify.Notification{
+					IncidentID:    filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
+					Target:        target.String(),
+					ClusterID:     clusterID,
+					EngineVersion: engine.Version,
+					RecordID:      res.Meta.RecordID,
+					DurationMs:    res.Meta.Duration.Milliseconds(),
+				}
+				if res.Incident != nil {
+					n.Status = res.Incident.Status
+				}
+				for _, f := range res.Findings {
+					n.Findings = append(n.Findings, notify.Finding{Analyzer: f.Analyzer, Severity: string(f.Severity), Title: f.Title})
+				}
+				secret := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_SECRET"), st.WebhookSecret)
+				if werr := notify.Send(cmd.Context(), url, secret, n); werr != nil {
+					fmt.Fprintf(os.Stderr, "note: webhook notification failed: %v\n", werr)
+				}
 			}
 			if format == "json" {
 				return renderJSON(res)

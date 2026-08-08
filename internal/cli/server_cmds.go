@@ -4,6 +4,7 @@ import (
 	"bufio"
 	contextPkg "context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -70,7 +71,7 @@ debugging - only enable when you need a profile).`,
 			srv := &http.Server{Addr: listen, Handler: handler}
 			errCh := make(chan error, 1)
 			go func() {
-				fmt.Printf("kubetective serve listening on %s\n", listen)
+				slog.Info("serve listening", "addr", listen, "pprof", enablePprof)
 				errCh <- srv.ListenAndServe()
 			}()
 
@@ -79,6 +80,7 @@ debugging - only enable when you need a profile).`,
 				return err
 			case <-ctx.Done():
 			}
+			slog.Info("shutting down (SIGINT/SIGTERM)")
 			fmt.Println("shutting down gracefully (SIGINT/SIGTERM) ...")
 			shutCtx, cancel := contextPkg.WithTimeout(contextPkg.Background(), 10*time.Second)
 			defer cancel()
@@ -344,6 +346,15 @@ Apply:  --apply <action-id> --yes
 			}
 			result, aerr := action.NewApplier(kc).Apply(cmd.Context(), *chosen)
 			audit := action.NewAudit(userName, inc.Meta.ClusterID, inc.ID, *chosen, "explicit", result, errStr(aerr))
+			slog.Info("action applied",
+				"incident_id", inc.ID,
+				"action_id", chosen.ID,
+				"action_type", string(chosen.Type),
+				"target", chosen.Target.String(),
+				"user", userName,
+				"result", result,
+				"error", errStr(aerr),
+			)
 			if serr := (action.FileAuditSink{Dir: record.DefaultDir()}).AppendAudit(inc.ID, audit); serr != nil {
 				fmt.Fprintf(os.Stderr, "note: audit record not written: %v\n", serr)
 			}

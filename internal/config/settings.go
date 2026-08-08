@@ -23,16 +23,19 @@ type LLMSettings struct {
 
 // Settings is the user-facing configuration schema (kubetective.yaml).
 type Settings struct {
-	Kubeconfig    string              `yaml:"kubeconfig,omitempty"`
-	Context       string              `yaml:"context,omitempty"`
-	Namespace     string              `yaml:"namespace,omitempty"`
-	Since         string              `yaml:"since,omitempty"` // duration, e.g. "30m"
-	PrometheusURL string              `yaml:"prometheus_url,omitempty"`
-	LokiURL       string              `yaml:"loki_url,omitempty"`
-	GitRepo       string              `yaml:"git_repo,omitempty"`
-	ClusterID     string              `yaml:"cluster_id,omitempty"`
-	LLM           LLMSettings         `yaml:"llm,omitempty"`
-	ServerListen  string              `yaml:"server_listen,omitempty"`
+	Kubeconfig    string      `yaml:"kubeconfig,omitempty"`
+	Context       string      `yaml:"context,omitempty"`
+	Namespace     string      `yaml:"namespace,omitempty"`
+	Since         string      `yaml:"since,omitempty"` // duration, e.g. "30m"
+	PrometheusURL string      `yaml:"prometheus_url,omitempty"`
+	LokiURL       string      `yaml:"loki_url,omitempty"`
+	GitRepo       string      `yaml:"git_repo,omitempty"`
+	ClusterID     string      `yaml:"cluster_id,omitempty"`
+	LLM           LLMSettings `yaml:"llm,omitempty"`
+	ServerListen  string      `yaml:"server_listen,omitempty"`
+	// Webhook fires on completed investigations (opt-in, HMAC-secured).
+	WebhookURL    string              `yaml:"webhook_url,omitempty"`
+	WebhookSecret string              `yaml:"webhook_secret,omitempty"`
 	Clusters      map[string]Settings `yaml:"clusters,omitempty"` // per-context overrides (v0.9)
 }
 
@@ -58,6 +61,8 @@ func (s Settings) merge(p Settings) Settings {
 	s.GitRepo = FirstNonEmpty(p.GitRepo, s.GitRepo)
 	s.ClusterID = FirstNonEmpty(p.ClusterID, s.ClusterID)
 	s.ServerListen = FirstNonEmpty(p.ServerListen, s.ServerListen)
+	s.WebhookURL = FirstNonEmpty(p.WebhookURL, s.WebhookURL)
+	s.WebhookSecret = FirstNonEmpty(p.WebhookSecret, s.WebhookSecret)
 	s.LLM.Model = FirstNonEmpty(p.LLM.Model, s.LLM.Model)
 	s.LLM.BaseURL = FirstNonEmpty(p.LLM.BaseURL, s.LLM.BaseURL)
 	s.LLM.APIKey = FirstNonEmpty(p.LLM.APIKey, s.LLM.APIKey)
