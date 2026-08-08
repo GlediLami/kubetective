@@ -28,7 +28,7 @@ BORDER = (41, 55, 75)
 
 FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 FONT_SIZE = 24
-LINE_H = 30
+LINE_H = 27
 PAD_X = 24
 PAD_Y = 18
 
@@ -76,7 +76,7 @@ def main():
 
     output_lines = wrap_lines(output_lines)
     cols = max((len(l) for l in [f"$ {args.command}"] + output_lines if l), default=80)
-    rows = max(4, len(output_lines) + 4)  # +1 for the closing "done" line
+    rows = max(3, len(output_lines) + 2)  # done line + 1 blank
 
     W = PAD_X * 2 + max(80, cols * (FONT_SIZE * 0.62)) + 40
     H = PAD_Y * 2 + rows * LINE_H + 30
