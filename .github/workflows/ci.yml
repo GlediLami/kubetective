@@ -31,3 +31,26 @@ jobs:
 
       - name: Evaluation gate
         run: go run ./cmd/kubetective evaluate
+
+  # Container smoke (v0.9 exit criterion): build the distroless image and
+  # run doctor + investigate in a kind cluster under deploy/rbac.yaml;
+  # fails on any RBAC gap.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Install kind and kubectl
+        run: |
+          go install sigs.k8s.io/kind@v0.30.0
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+          curl -fsSLo /usr/local/bin/kubectl \
+            https://dl.k8s.io/release/v1.31.0/bin/linux/amd64/kubectl
+          chmod +x /usr/local/bin/kubectl
+
+      - name: Run container smoke
+        run: hack/smoke-container.sh

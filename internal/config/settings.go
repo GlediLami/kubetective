@@ -23,16 +23,45 @@ type LLMSettings struct {
 
 // Settings is the user-facing configuration schema (kubetective.yaml).
 type Settings struct {
-	Kubeconfig    string      `yaml:"kubeconfig,omitempty"`
-	Context       string      `yaml:"context,omitempty"`
-	Namespace     string      `yaml:"namespace,omitempty"`
-	Since         string      `yaml:"since,omitempty"` // duration, e.g. "30m"
-	PrometheusURL string      `yaml:"prometheus_url,omitempty"`
-	LokiURL       string      `yaml:"loki_url,omitempty"`
-	GitRepo       string      `yaml:"git_repo,omitempty"`
-	ClusterID     string      `yaml:"cluster_id,omitempty"`
-	LLM           LLMSettings `yaml:"llm,omitempty"`
-	ServerListen  string      `yaml:"server_listen,omitempty"`
+	Kubeconfig    string              `yaml:"kubeconfig,omitempty"`
+	Context       string              `yaml:"context,omitempty"`
+	Namespace     string              `yaml:"namespace,omitempty"`
+	Since         string              `yaml:"since,omitempty"` // duration, e.g. "30m"
+	PrometheusURL string              `yaml:"prometheus_url,omitempty"`
+	LokiURL       string              `yaml:"loki_url,omitempty"`
+	GitRepo       string              `yaml:"git_repo,omitempty"`
+	ClusterID     string              `yaml:"cluster_id,omitempty"`
+	LLM           LLMSettings         `yaml:"llm,omitempty"`
+	ServerListen  string              `yaml:"server_listen,omitempty"`
+	Clusters      map[string]Settings `yaml:"clusters,omitempty"` // per-context overrides (v0.9)
+}
+
+// ForContext returns the effective settings for a kubeconfig context: the
+// top-level defaults with the per-context profile (clusters:<context>:)
+// merged on top, field by field. An unknown or empty context yields the
+// top-level settings unchanged. LLM groups merge per field too.
+func (s Settings) ForContext(context string) Settings {
+	profile, ok := s.Clusters[context]
+	if !ok {
+		return s
+	}
+	return s.merge(profile)
+}
+
+func (s Settings) merge(p Settings) Settings {
+	s.Kubeconfig = FirstNonEmpty(p.Kubeconfig, s.Kubeconfig)
+	s.Context = FirstNonEmpty(p.Context, s.Context)
+	s.Namespace = FirstNonEmpty(p.Namespace, s.Namespace)
+	s.Since = FirstNonEmpty(p.Since, s.Since)
+	s.PrometheusURL = FirstNonEmpty(p.PrometheusURL, s.PrometheusURL)
+	s.LokiURL = FirstNonEmpty(p.LokiURL, s.LokiURL)
+	s.GitRepo = FirstNonEmpty(p.GitRepo, s.GitRepo)
+	s.ClusterID = FirstNonEmpty(p.ClusterID, s.ClusterID)
+	s.ServerListen = FirstNonEmpty(p.ServerListen, s.ServerListen)
+	s.LLM.Model = FirstNonEmpty(p.LLM.Model, s.LLM.Model)
+	s.LLM.BaseURL = FirstNonEmpty(p.LLM.BaseURL, s.LLM.BaseURL)
+	s.LLM.APIKey = FirstNonEmpty(p.LLM.APIKey, s.LLM.APIKey)
+	return s
 }
 
 // SettingsPath returns the settings file location:

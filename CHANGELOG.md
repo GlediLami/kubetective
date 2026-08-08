@@ -21,6 +21,13 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
   id (sha256 of the API server host) and
   `kubetective incidents similar <id> --cluster <id>` scopes the lookup;
   untagged (legacy) incidents stay comparable from any scope.
+- Multi-cluster profiles: `clusters:` in `kubetective.yaml` holds
+  per-context settings (kubeconfig, namespace, sources, cluster id, LLM
+  fields) merged field-by-field over the top-level defaults.
+- Container smoke test (`hack/smoke-container.sh`, CI job `smoke`): the
+  distroless image runs `kubetective doctor` and a live crash-loop
+  investigation in a kind cluster under the least-privilege RBAC from
+  `deploy/rbac.yaml` — any permission gap fails the build.
 - Packaging: distroless Dockerfile (non-root, `KUBETECTIVE_HOME`),
   goreleaser config (linux/darwin, deb/rpm, container, cosign, SBOM),
   krew plugin manifest for `kubectl investigate`.

@@ -176,9 +176,23 @@ llm:
   model: gpt-4o-mini
   base_url: https://api.openai.com/v1
   api_key: sk-...       # or rely on KUBETECTIVE_LLM_API_KEY
+
+# Per-context overrides: when --context (or KUBETECTIVE_CONTEXT) selects
+# one of these, the profile merges onto the top-level defaults field by
+# field. Everything above is the fallback for any other context.
+clusters:
+  staging:
+    namespace: staging
+    loki_url: http://staging-loki:3100
+  drone-eu:
+    context: drone-eu
+    kubeconfig: ~/.kube/corp
+    namespace: drone
+    cluster_id: drone-eu
 ```
 
-Precedence is CLI flag > environment variable > `kubetective.yaml` > default.
+Precedence is CLI flag > environment variable > per-context profile
+> top-level `kubetective.yaml` > default.
 
 | Environment variable | Purpose |
 |---|---|
@@ -317,6 +331,9 @@ make build test vet fmt tidy
 - Adding an analyzer: implement `analyze.Analyzer` (see `internal/analyze/` for
   worked examples), register it in `internal/cli/root.go`, and add a scenario
   proving it. `kubetective benchmark` must stay green.
+- Container smoke: `hack/smoke-container.sh` builds the distroless image and
+  runs `doctor` + a live investigation in a throwaway kind cluster under
+  `deploy/rbac.yaml`. Needs docker + kind + kubectl on PATH (CI runs it).
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md).
 

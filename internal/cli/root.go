@@ -36,11 +36,11 @@ import (
 	gitopscollect "github.com/GlediLami/kubetective/internal/collect/gitops"
 	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
 	lokicollect "github.com/GlediLami/kubetective/internal/collect/loki"
-	"github.com/GlediLami/kubetective/internal/diag"
-	"github.com/GlediLami/kubetective/internal/memory"
 	promcollect "github.com/GlediLami/kubetective/internal/collect/prometheus"
+	"github.com/GlediLami/kubetective/internal/diag"
 	"github.com/GlediLami/kubetective/internal/engine"
 	"github.com/GlediLami/kubetective/internal/llm"
+	"github.com/GlediLami/kubetective/internal/memory"
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/record"
 	"github.com/GlediLami/kubetective/pkg/api"
@@ -53,8 +53,8 @@ var currentSettings config.Settings
 // settingsLoadErr is the parse error from kubetective.yaml ("" = clean);
 // settingsMissing marks an absent file (a WARN in doctor, not a FAIL).
 var (
-	settingsLoadErr    error
-	settingsMissing    bool
+	settingsLoadErr error
+	settingsMissing bool
 )
 
 // Execute runs the root command and exits with a non-zero code on failure.
@@ -158,30 +158,31 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 // evidence), git (--git-repo / env), and GitOps CRDs via a dynamic client
 // when available.
 //
-// Resolution order per source: CLI flag > env var > kubetective.yaml > off.
-// The returned clusterID tags incident records for memory scoping.
+// Resolution order per source: CLI flag > env var > kubetective.yaml
+// (per-context profile, then top-level) > off. The returned clusterID tags
+// incident records for memory scoping.
 func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL string) ([]collect.Collector, kubernetes.Interface, string, error) {
-	kubeconfig = config.FirstNonEmpty(kubeconfig, os.Getenv("KUBECONFIG"), currentSettings.Kubeconfig)
-	context = config.FirstNonEmpty(context, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context)
+	effective := currentSettings.ForContext(config.FirstNonEmpty(context, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context))
+	kubeconfig = config.FirstNonEmpty(kubeconfig, os.Getenv("KUBECONFIG"), effective.Kubeconfig)
 	client, cfg, err := k8scollect.Client(kubeconfig, context)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("connect to cluster: %w", err)
 	}
-	clusterID := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_CLUSTER_ID"), currentSettings.ClusterID)
+	clusterID := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_CLUSTER_ID"), effective.ClusterID)
 	if clusterID == "" {
 		clusterID = k8scollect.ClusterID(cfg)
 	}
 
 	collectors := []collect.Collector{k8scollect.New(client)}
-	prometheusURL = config.FirstNonEmpty(prometheusURL, os.Getenv("KUBETECTIVE_PROMETHEUS"), currentSettings.PrometheusURL)
+	prometheusURL = config.FirstNonEmpty(prometheusURL, os.Getenv("KUBETECTIVE_PROMETHEUS"), effective.PrometheusURL)
 	if prometheusURL != "" {
 		collectors = append(collectors, promcollect.New(prometheusURL))
 	}
-	lokiURL = config.FirstNonEmpty(lokiURL, os.Getenv("KUBETECTIVE_LOKI_URL"), currentSettings.LokiURL)
+	lokiURL = config.FirstNonEmpty(lokiURL, os.Getenv("KUBETECTIVE_LOKI_URL"), effective.LokiURL)
 	if lokiURL != "" {
 		collectors = append(collectors, lokicollect.New(lokiURL))
 	}
-	gitRepo = config.FirstNonEmpty(gitRepo, os.Getenv("KUBETECTIVE_GIT_REPO"), currentSettings.GitRepo)
+	gitRepo = config.FirstNonEmpty(gitRepo, os.Getenv("KUBETECTIVE_GIT_REPO"), effective.GitRepo)
 	if gitRepo != "" {
 		collectors = append(collectors, gitcollect.New(gitRepo))
 	}
@@ -215,15 +216,17 @@ func newInvestigateCmd() *cobra.Command {
   kubectl investigate --namespace production --since=30m --prometheus-url=http://localhost:9090`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Settings defaults (lowest precedence): namespace + window.
-			if !cmd.Flags().Changed("namespace") && currentSettings.Namespace != "" {
-				namespace = currentSettings.Namespace
+			// Settings defaults (lowest precedence): per-context profile,
+			// then top-level, for namespace + window.
+			st := currentSettings.ForContext(config.FirstNonEmpty(context, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context))
+			if !cmd.Flags().Changed("namespace") && st.Namespace != "" {
+				namespace = st.Namespace
 			}
-			if !cmd.Flags().Changed("since") && currentSettings.Since != "" {
-				if d, derr := time.ParseDuration(currentSettings.Since); derr == nil {
+			if !cmd.Flags().Changed("since") && st.Since != "" {
+				if d, derr := time.ParseDuration(st.Since); derr == nil {
 					since = d
 				} else {
-					return fmt.Errorf("invalid since %q in kubetective.yaml: %v", currentSettings.Since, derr)
+					return fmt.Errorf("invalid since %q in kubetective.yaml: %v", st.Since, derr)
 				}
 			}
 			target, err := parseTarget(args, namespace)
@@ -269,18 +272,18 @@ func newInvestigateCmd() *cobra.Command {
 			if llmEnabled {
 				model := llmModel
 				if model == "" {
-					model = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_MODEL"), currentSettings.LLM.Model)
+					model = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_MODEL"), st.LLM.Model)
 				}
 				base := llmBaseURL
 				if base == "" {
-					base = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_BASE_URL"), currentSettings.LLM.BaseURL)
+					base = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_BASE_URL"), st.LLM.BaseURL)
 				}
 				if base == "" {
 					base = "https://api.openai.com/v1"
 				}
 				key := llmAPIKey
 				if key == "" {
-					key = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_API_KEY"), currentSettings.LLM.APIKey)
+					key = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_API_KEY"), st.LLM.APIKey)
 				}
 				if model == "" {
 					return fmt.Errorf("--llm requires a model (--llm-model or KUBETECTIVE_LLM_MODEL)")
@@ -389,16 +392,17 @@ Exits 1 when anything is broken; warnings never fail the command.
 `,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-kubeconfig = config.FirstNonEmpty(kubeconfig, currentSettings.Kubeconfig)
 			kubeCtx = config.FirstNonEmpty(kubeCtx, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context)
+			effective := currentSettings.ForContext(kubeCtx)
+			kubeconfig = config.FirstNonEmpty(kubeconfig, effective.Kubeconfig)
 			rep := diag.Run(cmd.Context(), diag.Options{
-				Settings:        currentSettings,
+				Settings:        effective,
 				SettingsErr:     settingsLoadErr,
 				SettingsMissing: settingsMissing,
 				StateDir:        config.DefaultDir(),
 				ConfigPath:      config.Path(),
-				PrometheusURL:   config.FirstNonEmpty(os.Getenv("KUBETECTIVE_PROMETHEUS"), currentSettings.PrometheusURL),
-				LokiURL:         config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LOKI_URL"), currentSettings.LokiURL),
+				PrometheusURL:   config.FirstNonEmpty(os.Getenv("KUBETECTIVE_PROMETHEUS"), effective.PrometheusURL),
+				LokiURL:         config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LOKI_URL"), effective.LokiURL),
 				HubCheck: func(hubCtx context.Context) error {
 					client, _, err := k8scollect.Client(kubeconfig, kubeCtx)
 					if err != nil {
