@@ -54,6 +54,7 @@ def main():
         sys.exit(1)
 
     font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
+    CELL = font.getlength("M")  # actual monospace cell width (text advance) in px
 
     # terminal width: wrap over-long lines like a real terminal would
     TERM_COLS = 118
@@ -101,7 +102,7 @@ def main():
             y += LINE_H
         if show_cursor:
             x = PAD_X + 12 + cursor_x
-            d.rectangle([x, y - LINE_H + 3, x + 11, y - 3], fill=PROMPT if (flash % 2) else TEXT)
+            d.rectangle([x, y - LINE_H + 3, x + CELL, y - 3], fill=PROMPT if (flash % 2) else TEXT)
         return img
 
     # phases ---------------------------------------------------------------
@@ -115,7 +116,7 @@ def main():
     for i, ch in enumerate(cmd_text):
         acc += ch
         if i % 2 == 0 or i == len(cmd_text) - 1:
-            frames.append(make_frame([(acc, PROMPT)], len(acc) * 11, True, 0))
+            frames.append(make_frame([(acc, PROMPT)], len(acc) * CELL, True, 0))
     drawn = [(cmd_text, PROMPT)]
 
     # stream the real output line by line
