@@ -42,7 +42,7 @@ scores, invent causes, or propose actions.
 
 ## Features
 
-- **Evidence-based investigation.** 12 analyzers cover the most common failure
+- **Evidence-based investigation.** 11 analyzers cover the most common failure
   modes: OOM kills, crash loops, image pull failures, scheduling and
   unschedulable pods, node pressure, liveness and readiness probe failures, PVC
   issues, service selector mismatches, HPA at max, DNS failures, and configuration
@@ -142,7 +142,8 @@ kubetective investigate deployment/checkout \
 | `kubetective investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--loki-url`, `--git-repo`, `--llm*`) |
 | `kubetective replay <incident-id>` | Re-run a recorded investigation through the current engine (deterministic) |
 | `kubetective incidents` | List recorded incident ids, newest first |
-| `kubetective incidents similar <id>` | Find similar past incidents (incident memory, Jaccard overlap) |
+| `kubetective incidents similar <id> [--cluster <id>]` | Find similar past incidents (incident memory, Jaccard overlap; `--cluster` scopes the lookup to one cluster) |
+| `kubetective doctor` | Health check (version, config file, calibration, cluster connectivity, incident store, Prometheus/Loki reachability); exits non-zero on any failure |
 | `kubetective action <incident-id>` | Preview remediation actions (read-only; `--apply <id> --yes` to execute with approval) |
 | `kubetective benchmark [suite]` | Run the scenario suite gate. Exits 1 on any regression |
 | `kubetective evaluate [suite]` | Markdown evaluation report (per-category accuracy, calibration, FP check) |
@@ -157,16 +158,44 @@ Run `kubetective <command> --help` for every flag.
 KubeTective reads kubeconfig the same way kubectl does (`--kubeconfig`, `--context`,
 or the default loading rules).
 
+`kubetective.yaml` in the state directory (`~/.kubetective/kubetective.yaml`) sets
+defaults for an investigation. Example:
+
+```yaml
+# ~/.kubetective/kubetective.yaml
+context: prod-eu
+namespace: payments
+since: 30m
+kubeconfig: ~/.kube/config
+prometheus_url: http://localhost:9090
+loki_url: http://localhost:3100
+git_repo: ~/code/payments-manifests
+cluster_id: prod-eu # optional: override the auto-derived cluster identity
+llm:
+  provider: openai      # or ollama, vllm, llama.cpp
+  model: gpt-4o-mini
+  base_url: https://api.openai.com/v1
+  api_key: sk-...       # or rely on KUBETECTIVE_LLM_API_KEY
+```
+
+Precedence is CLI flag > environment variable > `kubetective.yaml` > default.
+
 | Environment variable | Purpose |
 |---|---|
 | `KUBETECTIVE_PROMETHEUS` | Prometheus base URL for metric evidence (same as `--prometheus-url`) |
 | `KUBETECTIVE_LOKI_URL` | Grafana Loki base URL for log evidence (same as `--loki-url`) |
 | `KUBETECTIVE_GIT_REPO` | Path to the manifests git checkout (same as `--git-repo`) |
+| `KUBETECTIVE_CONTEXT` | kubeconfig context to target (same as `--context`) |
+| `KUBETECTIVE_CLUSTER_ID` | Override the incident-memory cluster id (default: sha256 of the API server host) |
 | `KUBETECTIVE_LLM_MODEL` | LLM model name for the explainer |
 | `KUBETECTIVE_LLM_BASE_URL` | OpenAI-compatible API base URL (default `https://api.openai.com/v1`) |
 | `KUBETECTIVE_LLM_API_KEY` | API key (local servers like Ollama don't need one) |
 | `KUBETECTIVE_HOME` | State directory (default `~/.kubetective`: incidents, config) |
 | `KUBETECTIVE_CONFIG` | Config file path (default `~/.kubetective/config.json`) |
+
+Run `kubetective doctor` to check the whole wiring: engine version, config file,
+calibration state, cluster connectivity, incident store, and Prometheus/Loki
+reachability. It exits non-zero if anything fails, so it works in CI.
 
 The calibrated scoring temperature is persisted to `~/.kubetective/config.json` by
 `benchmark`/`evaluate` and loaded by every invocation.
@@ -179,7 +208,7 @@ kubectl investigate deployment/checkout
         ▼
 ┌─────────────┐   ┌────────────────┐   ┌──────────────────┐
 │  Collect    │──▶│  Build         │──▶│  Analyze         │
-│  (k8s, prom,│   │  timeline,     │   │  (12 rule-based  │
+│  (k8s, prom,│   │  timeline,     │   │  (11 rule-based  │
 │  git, gitops│   │  evidence      │   │  analyzers)      │
 │  (staged)   │   │  graph, changes│   │                  │
 └─────────────┘   └────────────────┘   └────────┬─────────┘

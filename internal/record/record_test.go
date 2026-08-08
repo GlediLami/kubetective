@@ -105,9 +105,12 @@ func TestReplayCollector(t *testing.T) {
 func TestBuildIncidentUsesRequestTarget(t *testing.T) {
 	req := &api.InvestigationRequest{Target: model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}}
 	res := &api.InvestigationResult{}
-	inc := BuildIncident("v0.1.0", req, res)
+	inc := BuildIncident("v0.1.0", req, res, "cluster-abc")
 	if inc.ID == "" || !strings.Contains(inc.ID, "checkout") {
 		t.Fatalf("incident ID = %q, want slug from target", inc.ID)
+	}
+	if inc.Meta.ClusterID != "cluster-abc" {
+		t.Fatalf("ClusterID = %q, want cluster-abc", inc.Meta.ClusterID)
 	}
 }
 
@@ -116,7 +119,7 @@ func TestBuildIncidentUsesRequestTarget(t *testing.T) {
 // live incidents.
 func TestTargetSurvivesSaveLoad(t *testing.T) {
 	req := &api.InvestigationRequest{Target: model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}}
-	inc := BuildIncident("v0.1.0", req, &api.InvestigationResult{})
+	inc := BuildIncident("v0.1.0", req, &api.InvestigationResult{}, "cluster-abc")
 	inc.Meta.Target = "deployment/prod/checkout"
 
 	store := NewStore(t.TempDir())
@@ -129,5 +132,8 @@ func TestTargetSurvivesSaveLoad(t *testing.T) {
 	}
 	if got.Meta.Target != "deployment/prod/checkout" {
 		t.Errorf("Meta.Target after round-trip = %q, want deployment/prod/checkout", got.Meta.Target)
+	}
+	if got.Meta.ClusterID != "cluster-abc" {
+		t.Errorf("Meta.ClusterID after round-trip = %q, want cluster-abc", got.Meta.ClusterID)
 	}
 }

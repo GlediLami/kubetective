@@ -8,6 +8,7 @@ import (
 
 	"github.com/GlediLami/kubetective/internal/benchmark"
 	"github.com/GlediLami/kubetective/internal/config"
+	"github.com/GlediLami/kubetective/internal/diag"
 	"github.com/GlediLami/kubetective/internal/llm"
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/score"
@@ -205,6 +206,32 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 			fmt.Fprintf(w, "adopted calibrated temperature T=%.1f (persisted to %s)\n", suite.LOO.Temperature, config.Path())
 		}
 	}
+	return nil
+}
+
+// renderDoctor prints the doctor report; exits non-zero only on failures.
+func renderDoctor(rep *diag.Report) error {
+	return renderDoctorReport(os.Stdout, rep)
+}
+
+// renderDoctorReport is the testable core: exit behavior is a returned
+// error, output goes to the given writer.
+func renderDoctorReport(w *os.File, rep *diag.Report) error {
+	fmt.Fprintf(w, "kubetective %s\n", rep.EngineVersion)
+	n := 0
+	for _, c := range rep.Checks {
+		if n > 0 {
+			fmt.Fprintln(w)
+		}
+		n++
+		fmt.Fprintf(w, "  %s  %s\n", c.Level, c.Name)
+		fmt.Fprintf(w, "       %s\n", c.Detail)
+	}
+	fmt.Fprintln(w)
+	if rep.Failing() {
+		return fmt.Errorf("doctor found failures - see the FAIL checks above")
+	}
+	fmt.Fprintln(w, "all checks passed")
 	return nil
 }
 

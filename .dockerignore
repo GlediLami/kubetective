@@ -1,0 +1,11 @@
+.git
+bin
+dist
+docs
+Formula
+scenarios
+hack
+.github
+*.md
+Dockerfile
+.dockerignore

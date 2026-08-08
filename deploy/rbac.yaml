@@ -1,0 +1,109 @@
+# KubeTLS: least-privilege RBAC (roadmap v0.9)
+#
+# Separation of concerns:
+#   ClusterRole  - read-only investigation (everything the collector reads)
+#   Namespace Role - the ONLY write verbs, scoped to the namespaces you
+#                    actually run remediation in (human-gated actions).
+#
+# Read path (investigate):
+#   pods + logs, nodes, events, pvcs, services, endpoints, hpas, ingresses,
+#   deployments/replicasets/statefulsets/daemonsets, secrets (resolved),
+#   plus gitops CRDs (Flux Kustomization/HelmRelease, ArgoCD Application).
+#
+# Write path (human-gated actions only, per namespace):
+#   deployments/update (rollback), pods/delete (restart).
+#
+# If something returns 403, fix the collector to skip it and produce an
+# evidence gap - never widen the role "just in case".
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubetective
+  labels:
+    app.kubernetes.io/name: kubetective
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources:
+      ["events", "secrets", "persistentvolumeclaims", "services", "endpoints"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["get", "list"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["get", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+---
+# Remediation verbs are namespaced: bind the Role in each namespace where
+# kubetective is allowed to roll back or restart workloads (example below
+# is the "prod" namespace).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kubetective-actions
+  namespace: prod
+  labels:
+    app.kubernetes.io/name: kubetective
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["update"] # rollback action
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["delete"] # restart action
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ServiceAccount
+metadata:
+  name: kubetective
+  namespace: kubetective
+  labels:
+    app.kubernetes.io/name: kubetective
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubetective
+  labels:
+    app.kubernetes.io/name: kubetective
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubetective
+subjects:
+  - kind: ServiceAccount
+    name: kubetective
+    namespace: kubetective
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kubetective-actions
+  namespace: prod
+  labels:
+    app.kubernetes.io/name: kubetective
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kubetective-actions
+subjects:
+  - kind: ServiceAccount
+    name: kubetective
+    namespace: kubetective

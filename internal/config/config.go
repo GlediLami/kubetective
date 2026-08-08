@@ -40,8 +40,14 @@ func DefaultDir() string {
 // Load reads the config; a missing file yields the defaults (zero values —
 // callers fall back to score.DefaultTemperature).
 func Load() (Config, error) {
+	return LoadWithPath(Path())
+}
+
+// LoadWithPath reads the config from an explicit file path; a missing file
+// yields the defaults, not an error.
+func LoadWithPath(path string) (Config, error) {
 	var cfg Config
-	b, err := os.ReadFile(Path())
+	b, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil

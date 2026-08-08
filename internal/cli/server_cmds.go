@@ -38,11 +38,11 @@ func newServeCmd() *cobra.Command {
   GET  /v1/incidents/{id} read a full incident record
   GET  /healthz          liveness`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
+			collectors, _, clusterID, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
 			if err != nil {
 				return err
 			}
-			rest := &server.REST{Inv: newEngine(collectors...), Store: record.NewDefaultStore()}
+			rest := &server.REST{Inv: newEngine(collectors...), Store: record.NewDefaultStore(), ClusterID: clusterID}
 			fmt.Printf("kubetective serve listening on %s\n", listen)
 			return http.ListenAndServe(listen, rest.Handler())
 		},
@@ -68,7 +68,7 @@ read-only tools: investigate, replay, list_incidents, read_incident,
 action_preview. Remediation stays human-gated in the CLI - there is
 deliberately no apply tool.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
+			collectors, _, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
 			if err != nil {
 				return err
 			}
@@ -110,6 +110,7 @@ deliberately no apply tool.`,
 // incidents (`similar <id>`, incident memory v0.8).
 func newIncidentsCmd() *cobra.Command {
 	var topN int
+	var cluster string
 	list := &cobra.Command{
 		Use:   "list",
 		Short: "List recorded incidents, newest first",
@@ -133,11 +134,12 @@ func newIncidentsCmd() *cobra.Command {
 		Short: "Find similar past incidents (incident memory)",
 		Long: `Ranks past incidents by how similar their failure shape is to the
 given incident (Jaccard overlap of observation kinds: symptom set +
-change set). Incident memory v0.8.`,
+change set). Incident memory v0.8; --cluster scopes the search to one
+cluster (multi-cluster memory v0.9).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store := record.NewDefaultStore()
-			matches, err := memory.Similar(store, args[0], topN)
+			matches, err := memory.Similar(store, args[0], topN, cluster)
 			if err != nil {
 				return err
 			}
@@ -146,12 +148,13 @@ change set). Incident memory v0.8.`,
 				return nil
 			}
 			for _, m := range matches {
-				fmt.Printf("%-40s overlap %.0f%% (%s) target=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target)
+				fmt.Printf("%-40s overlap %.0f%% (%s) target=%s cluster=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target, m.Cluster)
 			}
 			return nil
 		},
 	}
 	similar.Flags().IntVar(&topN, "top", 5, "maximum matches to show (0 = all)")
+	similar.Flags().StringVar(&cluster, "cluster", "", "only compare incidents from this cluster id (default: all clusters)")
 
 	cmd := &cobra.Command{
 		Use:   "incidents",

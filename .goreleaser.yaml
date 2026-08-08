@@ -1,0 +1,104 @@
+# goreleaser configuration (roadmap v0.9): linux/darwin binaries, deb/rpm
+# packages, container image, checksums, SBOM. Release flow:
+#
+#   VERSION=v0.9.0 make release            # tag + push (see CONTRIBUTING.md)
+#   goreleaser release --clean
+#
+# Signing (cosign) and SBOM (syft) run only in CI where the cosign key is
+# available; locally they are skipped (env: COSIGN_PRIVATE_KEY unset).
+version: 2
+
+project_name: kubetective
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kubetective
+    main: ./cmd/kubetective
+    binary: kubetective
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w
+      - -X github.com/GlediLami/kubetective/internal/engine.Version={{ .Version }}
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+  - id: kubectl-investigate
+    main: ./cmd/kubectl-investigate
+    binary: kubectl-investigate
+    env: [CGO_ENABLED=0]
+    ldflags:
+      - -s -w
+      - -X github.com/GlediLami/kubetective/internal/engine.Version={{ .Version }}
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: default
+    formats: [tar.gz]
+    files: [README.md, LICENSE]
+
+nfpms:
+  - id: kubetective
+    package_name: kubetective
+    vendor: GlediLami
+    homepage: https://github.com/GlediLami/kubetective
+    description: Kubernetes incident investigation engine
+    license: Apache-2.0
+    maintainer: Gledi Lami <gledi.lami@example.com>
+    formats: [deb, rpm]
+    bindir: /usr/bin
+    contents:
+      - src: LICENSE
+        dst: /usr/share/doc/kubetective/LICENSE
+      - src: README.md
+        dst: /usr/share/doc/kubetective/README.md
+
+sboms:
+  - artifacts: archive
+
+dockers:
+  - id: kubetective
+    use: buildx
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/gledilami/kubetective:{{ .Version }}"
+      - "ghcr.io/gledilami/kubetective:latest"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title={{ .ProjectName }}"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.source=https://github.com/GlediLami/kubetective"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+signs:
+  - id: cosign
+    cmd: cosign
+    args:
+      - "sign-blob"
+      - "--key=env://COSIGN_PRIVATE_KEY"
+      - "--output-signature=${signature}"
+      - "${artifact}"
+    artifacts: all
+    env:
+      - "COSIGN_PASSWORD={{ .Env.COSIGN_PASSWORD }}"
+
+release:
+  github:
+    owner: GlediLami
+    name: kubetective
+  header: |
+    ## kubetective {{ .Version }}
+
+    Signed with cosign; SBOM attached to the assets. See the
+    [CHANGELOG](CHANGELOG.md) for what shipped.
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^chore:"
+      - "^test:"

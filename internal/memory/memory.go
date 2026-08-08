@@ -20,6 +20,7 @@ import (
 type Match struct {
 	IncidentID  string   `json:"incident_id"`
 	Target      string   `json:"target"`
+	Cluster     string   `json:"cluster,omitempty"`
 	Overlap     float64  `json:"overlap"` // Jaccard similarity of kind sets
 	SharedKinds []string `json:"shared_kinds,omitempty"`
 }
@@ -77,8 +78,10 @@ func jaccard(a, b []string) float64 {
 }
 
 // Similar ranks past incidents by kind-set overlap with the given incident,
-// newest first within equal overlap. topN ≤ 0 means all.
-func Similar(store *record.Store, incidentID string, topN int) ([]Match, error) {
+// newest first within equal overlap. topN ≤ 0 means all. When clusterID is
+// non-empty, only incidents from that cluster are considered (multi-cluster
+// memory scoping, v0.9).
+func Similar(store *record.Store, incidentID string, topN int, clusterID string) ([]Match, error) {
 	target, err := store.Load(incidentID)
 	if err != nil {
 		return nil, fmt.Errorf("load incident %q: %w", incidentID, err)
@@ -98,6 +101,9 @@ func Similar(store *record.Store, incidentID string, topN int) ([]Match, error) 
 		if err != nil {
 			continue // skip unreadable records
 		}
+		if clusterID != "" && other.Meta.ClusterID != "" && other.Meta.ClusterID != clusterID {
+			continue
+		}
 		overlap := jaccard(targetKinds, kindsOf(other))
 		if overlap <= 0 {
 			continue
@@ -105,6 +111,7 @@ func Similar(store *record.Store, incidentID string, topN int) ([]Match, error) 
 		m := Match{
 			IncidentID: id,
 			Target:     other.Meta.Target,
+			Cluster:    other.Meta.ClusterID,
 			Overlap:    overlap,
 		}
 		for _, k := range targetKinds {

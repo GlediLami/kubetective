@@ -21,6 +21,9 @@ import (
 type REST struct {
 	Inv   api.Investigator
 	Store *record.Store
+	// ClusterID tags records saved through this server (multi-cluster
+	// memory scoping, v0.9). Empty means the environment default.
+	ClusterID string
 }
 
 func (s *REST) Handler() http.Handler {
@@ -74,7 +77,7 @@ func (s *REST) handleInvestigate(w http.ResponseWriter, r *http.Request) {
 	// Record every investigation (replay substrate) -
 	// same behavior as the CLI.
 	if s.Store != nil {
-		inc := record.BuildIncident(engine.Version, req, res)
+		inc := record.BuildIncident(engine.Version, req, res, s.ClusterID)
 		if id, serr := s.Store.Save(inc); serr == nil {
 			res.Meta.RecordID = id
 		}

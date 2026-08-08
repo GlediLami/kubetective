@@ -58,15 +58,16 @@ type incidentMetaLine struct {
 	RecordVersion int    `json:"record_version"`
 	EngineVersion string `json:"engine_version"`
 	Target        string `json:"target,omitempty"`
+	ClusterID     string `json:"cluster_id,omitempty"` // memory scoping (v0.9)
 	Created       string `json:"created"`
 }
 
 // BuildIncident wraps an investigation result into an Incident for saving.
-func BuildIncident(engineVersion string, req *api.InvestigationRequest, res *api.InvestigationResult) *model.Incident {
+func BuildIncident(engineVersion string, req *api.InvestigationRequest, res *api.InvestigationResult, clusterID string) *model.Incident {
 	return &model.Incident{
 		ID: fmt.Sprintf("incident-%d-%s", time.Now().Unix(), slug(req.Target)),
 		Meta: model.IncidentMeta{
-			ClusterID:     os.Getenv("KUBETECTIVE_CLUSTER_ID"),
+			ClusterID:     clusterID,
 			EngineVersion: engineVersion,
 			RecordVersion: RecordVersion,
 			Target:        req.Target.String(),
@@ -118,6 +119,7 @@ func (s *Store) Save(inc *model.Incident) (string, error) {
 		RecordVersion: inc.Meta.RecordVersion,
 		EngineVersion: inc.Meta.EngineVersion,
 		Target:        inc.Meta.Target,
+		ClusterID:     inc.Meta.ClusterID,
 		Created:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := enc.Encode(line{Type: "meta", Meta: &meta}); err != nil {
@@ -180,6 +182,7 @@ func (s *Store) Load(id string) (*model.Incident, error) {
 				inc.Meta.RecordVersion = l.Meta.RecordVersion
 				inc.Meta.EngineVersion = l.Meta.EngineVersion
 				inc.Meta.Target = l.Meta.Target
+				inc.Meta.ClusterID = l.Meta.ClusterID
 			}
 		case "observation":
 			if l.Observation != nil {

@@ -5,6 +5,10 @@
 package kubernetes
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -35,4 +39,15 @@ func Client(kubeconfig, context string) (kubernetes.Interface, *rest.Config, err
 	}
 	c, err := kubernetes.NewForConfig(cfg)
 	return c, cfg, err
+}
+
+// ClusterID anonymizes a cluster endpoint (server host from kubeconfig) into
+// a stable identifier for incident memory scoping (multi-cluster v0.9). Same
+// endpoint, same id; do not feed raw hostnames into records.
+func ClusterID(cfg *rest.Config) string {
+	if cfg == nil || cfg.Host == "" {
+		return "unknown"
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(cfg.Host)))
+	return "cluster-" + hex.EncodeToString(sum[:8])
 }

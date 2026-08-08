@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,7 @@ import (
 	gitopscollect "github.com/GlediLami/kubetective/internal/collect/gitops"
 	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
 	lokicollect "github.com/GlediLami/kubetective/internal/collect/loki"
+	"github.com/GlediLami/kubetective/internal/diag"
 	"github.com/GlediLami/kubetective/internal/memory"
 	promcollect "github.com/GlediLami/kubetective/internal/collect/prometheus"
 	"github.com/GlediLami/kubetective/internal/engine"
@@ -44,8 +46,30 @@ import (
 	"github.com/GlediLami/kubetective/pkg/api"
 )
 
+// currentSettings holds the values loaded from kubetective.yaml at startup
+// (lowest precedence: flags > env > settings > defaults).
+var currentSettings config.Settings
+
+// settingsLoadErr is the parse error from kubetective.yaml ("" = clean);
+// settingsMissing marks an absent file (a WARN in doctor, not a FAIL).
+var (
+	settingsLoadErr    error
+	settingsMissing    bool
+)
+
 // Execute runs the root command and exits with a non-zero code on failure.
 func Execute() {
+	// Load persistent settings (kubetective.yaml, v0.9) + adopted calibration
+	// temperature (config.json). Settings are the lowest-precedence default:
+	// env vars override them, CLI flags override both.
+	var serr error
+	currentSettings, serr = config.LoadSettings()
+	if serr != nil {
+		settingsLoadErr = serr
+		fmt.Fprintln(os.Stderr, "note: kubetective.yaml:", serr)
+	} else if _, statErr := os.Stat(config.SettingsPath()); os.IsNotExist(statErr) {
+		settingsMissing = true
+	}
 	if cfg, err := config.Load(); err == nil && cfg.Temperature > 0 {
 		score.SetTemperature(cfg.Temperature)
 	}
@@ -133,34 +157,38 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 // Prometheus (--prometheus-url / env), Loki (--loki-url / env, log
 // evidence), git (--git-repo / env), and GitOps CRDs via a dynamic client
 // when available.
-func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL string) ([]collect.Collector, kubernetes.Interface, error) {
+//
+// Resolution order per source: CLI flag > env var > kubetective.yaml > off.
+// The returned clusterID tags incident records for memory scoping.
+func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL string) ([]collect.Collector, kubernetes.Interface, string, error) {
+	kubeconfig = config.FirstNonEmpty(kubeconfig, os.Getenv("KUBECONFIG"), currentSettings.Kubeconfig)
+	context = config.FirstNonEmpty(context, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context)
 	client, cfg, err := k8scollect.Client(kubeconfig, context)
 	if err != nil {
-		return nil, nil, fmt.Errorf("connect to cluster: %w", err)
+		return nil, nil, "", fmt.Errorf("connect to cluster: %w", err)
 	}
+	clusterID := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_CLUSTER_ID"), currentSettings.ClusterID)
+	if clusterID == "" {
+		clusterID = k8scollect.ClusterID(cfg)
+	}
+
 	collectors := []collect.Collector{k8scollect.New(client)}
-	if prometheusURL == "" {
-		prometheusURL = os.Getenv("KUBETECTIVE_PROMETHEUS")
-	}
+	prometheusURL = config.FirstNonEmpty(prometheusURL, os.Getenv("KUBETECTIVE_PROMETHEUS"), currentSettings.PrometheusURL)
 	if prometheusURL != "" {
 		collectors = append(collectors, promcollect.New(prometheusURL))
 	}
-	if lokiURL == "" {
-		lokiURL = os.Getenv("KUBETECTIVE_LOKI_URL")
-	}
+	lokiURL = config.FirstNonEmpty(lokiURL, os.Getenv("KUBETECTIVE_LOKI_URL"), currentSettings.LokiURL)
 	if lokiURL != "" {
 		collectors = append(collectors, lokicollect.New(lokiURL))
 	}
-	if gitRepo == "" {
-		gitRepo = os.Getenv("KUBETECTIVE_GIT_REPO")
-	}
+	gitRepo = config.FirstNonEmpty(gitRepo, os.Getenv("KUBETECTIVE_GIT_REPO"), currentSettings.GitRepo)
 	if gitRepo != "" {
 		collectors = append(collectors, gitcollect.New(gitRepo))
 	}
 	if dyn, derr := dynamic.NewForConfig(cfg); derr == nil {
 		collectors = append(collectors, gitopscollect.New(dyn))
 	}
-	return collectors, client, nil
+	return collectors, client, clusterID, nil
 }
 
 func newInvestigateCmd() *cobra.Command {
@@ -187,11 +215,22 @@ func newInvestigateCmd() *cobra.Command {
   kubectl investigate --namespace production --since=30m --prometheus-url=http://localhost:9090`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Settings defaults (lowest precedence): namespace + window.
+			if !cmd.Flags().Changed("namespace") && currentSettings.Namespace != "" {
+				namespace = currentSettings.Namespace
+			}
+			if !cmd.Flags().Changed("since") && currentSettings.Since != "" {
+				if d, derr := time.ParseDuration(currentSettings.Since); derr == nil {
+					since = d
+				} else {
+					return fmt.Errorf("invalid since %q in kubetective.yaml: %v", currentSettings.Since, derr)
+				}
+			}
 			target, err := parseTarget(args, namespace)
 			if err != nil {
 				return err
 			}
-			collectors, _, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL)
+			collectors, _, clusterID, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL)
 			if err != nil {
 				return err
 			}
@@ -207,7 +246,7 @@ func newInvestigateCmd() *cobra.Command {
 			}
 			// Record every investigation (replay substrate).
 			store := record.NewDefaultStore()
-			inc := record.BuildIncident(engine.Version, req, res)
+			inc := record.BuildIncident(engine.Version, req, res, clusterID)
 			if path, serr := store.Save(inc); serr == nil {
 				res.Meta.RecordID = path
 			}
@@ -217,10 +256,10 @@ func newInvestigateCmd() *cobra.Command {
 			// Incident memory: "seen this before?" (v0.8) — surface similar
 			// past incidents before the main output.
 			if id := res.Meta.RecordID; id != "" {
-				if matches, merr := memory.Similar(store, filepath.Base(id), 3); merr == nil && len(matches) > 0 {
+				if matches, merr := memory.Similar(store, filepath.Base(id), 3, clusterID); merr == nil && len(matches) > 0 {
 					fmt.Fprintf(os.Stderr, "note: similar past incident(s):\n")
 					for _, m := range matches {
-						fmt.Fprintf(os.Stderr, "  %s (overlap %.0f%%, %s) target=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target)
+						fmt.Fprintf(os.Stderr, "  %s (overlap %.0f%%, %s) target=%s cluster=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target, clusterID)
 					}
 				}
 			}
@@ -230,18 +269,18 @@ func newInvestigateCmd() *cobra.Command {
 			if llmEnabled {
 				model := llmModel
 				if model == "" {
-					model = os.Getenv("KUBETECTIVE_LLM_MODEL")
+					model = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_MODEL"), currentSettings.LLM.Model)
 				}
 				base := llmBaseURL
 				if base == "" {
-					base = os.Getenv("KUBETECTIVE_LLM_BASE_URL")
+					base = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_BASE_URL"), currentSettings.LLM.BaseURL)
 				}
 				if base == "" {
 					base = "https://api.openai.com/v1"
 				}
 				key := llmAPIKey
 				if key == "" {
-					key = os.Getenv("KUBETECTIVE_LLM_API_KEY")
+					key = config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LLM_API_KEY"), currentSettings.LLM.APIKey)
 				}
 				if model == "" {
 					return fmt.Errorf("--llm requires a model (--llm-model or KUBETECTIVE_LLM_MODEL)")
@@ -332,13 +371,51 @@ Exit code 1 if any scenario fails - this is the analyzer contribution gate.`,
 }
 
 func newDoctorCmd() *cobra.Command {
-	return &cobra.Command{
+	var (
+		kubeconfig string
+		kubeCtx    string
+	)
+	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Quick cluster health scan (static analyzers only)",
+		Short: "Check the environment: kubeconfig, store, config, evidence sources",
+		Long: `Read-only preflight of everything kubetective depends on:
+  settings   kubetective.yaml parses
+  calibration adopted temperature (config.json)
+  cluster    kubeconfig resolves and the API is reachable
+  store      incident store readable
+  prometheus / loki  optional evidence sources reachable
+
+Exits 1 when anything is broken; warnings never fail the command.
+`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("doctor lands in a later v0.1 milestone")
+kubeconfig = config.FirstNonEmpty(kubeconfig, currentSettings.Kubeconfig)
+			kubeCtx = config.FirstNonEmpty(kubeCtx, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context)
+			rep := diag.Run(cmd.Context(), diag.Options{
+				Settings:        currentSettings,
+				SettingsErr:     settingsLoadErr,
+				SettingsMissing: settingsMissing,
+				StateDir:        config.DefaultDir(),
+				ConfigPath:      config.Path(),
+				PrometheusURL:   config.FirstNonEmpty(os.Getenv("KUBETECTIVE_PROMETHEUS"), currentSettings.PrometheusURL),
+				LokiURL:         config.FirstNonEmpty(os.Getenv("KUBETECTIVE_LOKI_URL"), currentSettings.LokiURL),
+				HubCheck: func(hubCtx context.Context) error {
+					client, _, err := k8scollect.Client(kubeconfig, kubeCtx)
+					if err != nil {
+						return fmt.Errorf("kubeconfig: %w", err)
+					}
+					if _, err := client.Discovery().ServerVersion(); err != nil {
+						return fmt.Errorf("cluster API unreachable: %w", err)
+					}
+					return nil
+				},
+			})
+			return renderDoctor(&rep)
 		},
 	}
+	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "kubeconfig path to check (default: KUBECONFIG or ~/.kube/config)")
+	cmd.Flags().StringVar(&kubeCtx, "context", "", "kubeconfig context to check")
+	return cmd
 }
 
 func newVersionCmd() *cobra.Command {

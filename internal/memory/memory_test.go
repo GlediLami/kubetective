@@ -44,7 +44,7 @@ func TestSimilarRanksByOverlap(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	matches, err := Similar(store, "inc-1", 5)
+	matches, err := Similar(store, "inc-1", 5, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,6 +66,43 @@ func TestSimilarRanksByOverlap(t *testing.T) {
 	if len(matches[0].SharedKinds) != 6 {
 		t.Errorf("shared kinds = %v", matches[0].SharedKinds)
 	}
+	if matches[0].Cluster != "c1" {
+		t.Errorf("match cluster = %q, want c1", matches[0].Cluster)
+	}
+}
+
+func TestSimilarScopedToCluster(t *testing.T) {
+	store := record.NewStore(t.TempDir())
+	// Same failure shape, different clusters.
+	ours := inc("inc-a", "deployment/prod/checkout", "pod.state", "container.terminated")
+	ours.Meta.ClusterID = "cluster-one"
+	other := inc("inc-b", "deployment/prod/api", "pod.state", "container.terminated")
+	other.Meta.ClusterID = "cluster-two"
+	for _, i := range []*model.Incident{ours, other} {
+		if _, err := store.Save(i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	matches, err := Similar(store, "inc-a", 5, "cluster-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 0 {
+		t.Errorf("matches = %d, want 0 (cluster-two incident excluded by scope)", len(matches))
+	}
+	// Untagged incidents (no cluster id) are comparable from any scope.
+	legacy := inc("inc-c", "deployment/prod/pay", "pod.state", "container.terminated")
+	legacy.Meta.ClusterID = ""
+	if _, err := store.Save(legacy); err != nil {
+		t.Fatal(err)
+	}
+	matches, err = Similar(store, "inc-a", 5, "cluster-one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 || matches[0].IncidentID != "inc-c" {
+		t.Errorf("matches = %+v, want only inc-c (untagged compared)", matches)
+	}
 }
 
 func TestSimilarEmptyStore(t *testing.T) {
@@ -73,7 +110,7 @@ func TestSimilarEmptyStore(t *testing.T) {
 	if _, err := store.Save(inc("only", "deployment/prod/x", "pod.state")); err != nil {
 		t.Fatal(err)
 	}
-	matches, err := Similar(store, "only", 5)
+	matches, err := Similar(store, "only", 5, "")
 	if err != nil {
 		t.Fatal(err)
 	}

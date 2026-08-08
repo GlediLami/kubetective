@@ -8,6 +8,34 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ### Added
 
+- `v0.9` - Config file (`kubetective.yaml` in the state dir): kubeconfig,
+  context, namespace, since, prometheus/loki URLs, git repo, cluster id,
+  LLM provider settings. Precedence: CLI flag > env var > config file
+  > default. Known env vars: `KUBETECTIVE_HOME`, `KUBECTIVE_PROMETHEUS`,
+  `KUBETECTIVE_LOKI_URL`, `KUBECTIVE_GIT_REPO`, `KUBECTIVE_CLUSTER_ID`.
+- Real doctor (`kubetective doctor`): health checks for version, config
+  file, calibration state, cluster connectivity, incident store,
+  prometheus and loki reachability; non-zero exit on any failing check
+  (CI-friendly).
+- Multi-cluster memory: incidents are tagged with an anonymized cluster
+  id (sha256 of the API server host) and
+  `kubetective incidents similar <id> --cluster <id>` scopes the lookup;
+  untagged (legacy) incidents stay comparable from any scope.
+- Packaging: distroless Dockerfile (non-root, `KUBETECTIVE_HOME`),
+  goreleaser config (linux/darwin, deb/rpm, container, cosign, SBOM),
+  krew plugin manifest for `kubectl investigate`.
+- Least-privilege RBAC manifests: read-only cluster role (collector
+  surface), namespaced write role for human-gated rollback/restart
+  actions.
+
+### Fixed
+
+- MCP `serverInfo` reported the hard-coded version; now reports the
+  engine version (`kubetective mcp` and `kubetective version` can no
+  longer drift).
+- README advertised a 12th analyzer that does not exist; corrected to
+  11 (per-analyzer table still authoritative).
+
 - `v0.8` - Loki log collector (`--loki-url` / `KUBETECTIVE_LOKI_URL`):
   log evidence for the adaptive loop from Loki, silent degradation;
   incident memory v1 (`kubetective incidents similar <id>`, Jaccard
