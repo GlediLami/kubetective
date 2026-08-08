@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KubeTective — Kubernetes incident investigation engine</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>KubeTective</h1>
+    <p class="tagline">Evidence-first Kubernetes incident investigation. Deterministic first, AI second.</p>
+    <nav>
+      <a href="#install">Install</a>
+      <a href="#quickstart">Quickstart</a>
+      <a href="#integrations">Integrations</a>
+      <a href="#scoring">Scoring &amp; calibration</a>
+      <a href="#ops">Operations</a>
+      <a href="#security">Security</a>
+      <a href="https://github.com/GlediLami/kubetective">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section id="intro">
+      <p>KubeTective investigates Kubernetes incidents end to end: it collects deterministic
+      evidence (pod state, events, logs, deployment owner graph, HPA pressure, PVC, service,
+      GitOps CRs), builds a timeline and evidence graph, scores candidate root causes with a
+      calibrated, explainable model, and only then consults an LLM for narrative — never for
+      scoring. Every investigation is recorded and replayable; every recommendation is
+      evidence-linked; every action is human-gated.</p>
+    </section>
+
+    <section id="install">
+      <h2>Install</h2>
+      <h3>Homebrew</h3>
+      <pre><code>brew install gledilami/kubetective/kubetective</code></pre>
+      <h3>kubectl plugin (krew)</h3>
+      <pre><code>kubectl krew install investigate</code></pre>
+      <h3>Binary / container</h3>
+      <pre><code># GitHub release assets (linux/darwin, amd64/arm64, deb, rpm)
+# container image:
+docker pull ghcr.io/gledilami/kubetective:latest</code></pre>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quickstart</h2>
+      <pre><code># investigate a failing pod (or deployment, PVC, ...)
+kubectl investigate pod/checkout-7f84c9
+kubectl investigate deployment/checkout --since=2h
+
+# run as a kubectl plugin
+kubectl investigate deployment/checkout
+
+# preflight your environment
+kubetective doctor
+
+# replay a recorded incident
+kubetective replay &lt;incident-id&gt;
+
+# search the incident store
+kubetective incidents search --target checkout --since=7d --limit 10</code></pre>
+      <p>Every command above works with zero configuration against your current
+      kubeconfig. Optional sources (Prometheus, Loki, a git checkout) extend the evidence;
+      an optional OpenAI-compatible LLM adds narrative on top — never authority.</p>
+    </section>
+
+    <section id="integrations">
+      <h2>Integrations</h2>
+      <h3>Investigate from an alert (PagerDuty, Grafana, Slack)</h3>
+      <pre><code># Grafana webhook payload -&gt; investigation
+kubetective alert grafana --file=alert.json
+
+# PagerDuty v2 webhook, or a Slack slash-command payload
+echo '{...pagerduty...}' | kubetective alert pagerduty
+echo '{"text":"deployment/checkout since=2h"}' | kubetective alert slack</code></pre>
+      <p>Zero API keys: the payload is parsed locally, the engine uses its existing cluster
+      access. Grafana <code>kubernetes_*</code> alert labels, PagerDuty incident titles, and
+      Slack command text all name the target; payloads without one fail with a readable
+      error instead of guessing.</p>
+      <h3>Completion webhook (outbound)</h3>
+      <pre><code># kubetective.yaml
+webhook_url: https://ops.example.com/kubetective
+webhook_secret: &lt;shared-secret&gt;</code></pre>
+      <p>Every investigation POSTs a notification signed with HMAC-SHA256
+      (<code>X-Kubetective-Signature</code>). Receivers must verify the signature before
+      parsing. Notification failure never fails the investigation.</p>
+      <h3>Servers</h3>
+      <p><code>kubetective serve</code> exposes <code>POST /v1/investigate</code>,
+      <code>GET /v1/incidents[/{id}]</code>, <code>/healthz</code> and <code>/metrics</code>;
+      <code>kubetective mcp</code> speaks the Model Context Protocol over stdio (read-only
+      tools).</p>
+    </section>
+
+    <section id="scoring">
+      <h2>Scoring &amp; calibration</h2>
+      <p>Every hypothesis carries a calibrated confidence: scores are validated with
+      leave-one-out cross-validation on a scenario suite, dampened when calibration is off,
+      and always decomposable into the evidence lines that produced them. The evaluation
+      report is a published, per-release artifact:
+      <a href="https://github.com/GlediLami/kubetective/blob/main/reports/evaluation/latest.md">
+      reports/evaluation/latest.md</a> — it gates every change in CI.</p>
+    </section>
+
+    <section id="ops">
+      <h2>Operations</h2>
+      <ul>
+        <li><strong>Least-privilege RBAC</strong>: <code>deploy/rbac.yaml</code> — read-only
+        collector role, namespaced write role for human-gated rollback/restart actions.</li>
+        <li><strong>Structured logs</strong>: <code>--log-format json|text</code>; self-metrics
+        via <code>/metrics</code>; pprof behind <code>--pprof</code>.</li>
+        <li><strong>Records</strong>: JSONL incident store with a versioned schema — records
+        written by a newer engine are rejected loudly, never silently mis-read.</li>
+      </ul>
+    </section>
+
+    <section id="security">
+      <h2>Security</h2>
+      <p>Incident records (which may carry log snippets) are owner-only on disk. The
+      completion webhook is HMAC-signed. Container images are distroless and run as a
+      non-root user. See
+      <a href="https://github.com/GlediLami/kubetective/blob/main/SECURITY.md">SECURITY.md</a>
+      and the
+      <a href="https://github.com/GlediLami/kubetective/blob/main/reports/security/review-v1.0.md">
+      v1.0 security review</a>.</p>
+    </section>
+
+    <footer>
+      <p>Apache-2.0 · <a href="https://github.com/GlediLami/kubetective">github.com/GlediLami/kubetective</a> ·
+      <a href="https://github.com/GlediLami/kubetective/blob/main/CHANGELOG.md">Changelog</a></p>
+    </footer>
+  </main>
+</body>
+</html>

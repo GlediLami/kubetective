@@ -74,9 +74,19 @@ pre-commit hook (no stale version can be committed).
    hack/release.sh v0.9.0 --dry-run
    ```
 
-3. Create the GitHub Release for the tag with the changelog entry, then
-   download the release assets and replace the krew manifest `sha256:
-   REPLACE_ME` values before submitting to the kubectl plugin index.
+3. Create the GitHub Release for the tag with the changelog entry
+   (`gh release create v1.0.0 --notes ...`), attach the release assets
+   (goreleaser artifacts: kubectl-investigate tarballs per platform + the
+   container image), then finish the krew submission in one command:
+
+   ```sh
+   hack/submit-krew.sh            # fills sha256 from the release assets,
+   #                              # commits the manifest, opens the krew-index PR
+   hack/submit-krew.sh --dry-run  # preview without touching anything
+   ```
+
+   The script refuses to run until the release assets exist, so the krew
+   manifest can never ship placeholder hashes.
 
 4. Between releases, bump to a dev version (engine + Dockerfile + krew
    manifest stay in lockstep):
