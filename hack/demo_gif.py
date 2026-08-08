@@ -139,8 +139,8 @@ def main():
         drawn.append((line, color))
         for _ in range(max(1, min(4, len(line) // 40))):
             frames.append(make_frame(drawn, -1, True, 0))
-    # hold on the final screen with a blinking cursor
-    for t in range(12):
+    # hold on the final screen with a blinking cursor (~4s so readers can take it in)
+    for t in range(88):
         frames.append(make_frame(drawn, -1, True, t))
 
     out = Path(args.out)
