@@ -120,10 +120,9 @@ def main():
         frames.append(make_frame([(acc, PROMPT)], len(acc) * CELL, True, 1))
     drawn = [(cmd_text, PROMPT)]
 
-    # stream the real output line by line
+    # stream the real output line by line (blank separator lines included,
+    # like a real terminal: skipping them was leaving dead rows at the bottom)
     for line in output_lines:
-        if not line:
-            continue
         if line.startswith("╭") or line.startswith("╰"):
             color = ACCENT
         elif line.startswith("ROOT CAUSE") or line.startswith("EVIDENCE") or line.startswith("TIMELINE"):
