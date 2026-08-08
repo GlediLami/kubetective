@@ -68,6 +68,29 @@ kubectl rollout status deployment/crashy --namespace "$WORK_NS" --timeout=90s >/
 CRASHY_POD=$(kubectl get pods --namespace "$WORK_NS" -l app=crashy -o jsonpath='{.items[0].metadata.name}')
 [ -n "$CRASHY_POD" ] || { echo "SMOKE FAIL: no crashy pod found" >&2; exit 1; }
 
+# The action E2E below needs a record that already shows the crash loop:
+# wait until the pod is restarted at least twice while still failing, so
+# the crash-loop evidence cannot race the investigation job.
+echo "== wait for crashy pod to reach CrashLoopBackOff (>=2 restarts)"
+CRASHY_OK=0
+for i in $(seq 1 36); do
+  STATE=$(kubectl get pod "$CRASHY_POD" --namespace "$WORK_NS" \
+    -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}..{.status.containerStatuses[0].restartCount}' 2>/dev/null || true)
+  REASON=${STATE%%..*}
+  RESTART=${STATE##*..}
+  if [ "$REASON" = "CrashLoopBackOff" ] && [ "${RESTART:-0}" -ge 2 ]; then
+    CRASHY_OK=1
+    break
+  fi
+  sleep 5
+done
+if [ "$CRASHY_OK" != 1 ]; then
+  echo "SMOKE FAIL: crashy pod never reached CrashLoopBackOff with 2 restarts" >&2
+  kubectl get pods --namespace "$WORK_NS" -l app=crashy -o wide >&2
+  exit 1
+fi
+echo "  pod $CRASHY_POD is in CrashLoopBackOff (restart #$RESTART)"
+
 # Common job template: distroless binary + record store on the PVC.
 run_job() {
   local name=$1; shift
