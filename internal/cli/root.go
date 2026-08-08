@@ -100,7 +100,7 @@ func isPluginInvocation() bool {
 
 func isKnownCommand(arg string) bool {
 	switch arg {
-	case "investigate", "replay", "benchmark", "doctor", "version", "help", "completion":
+	case "investigate", "replay", "benchmark", "doctor", "version", "help", "completion", "alert":
 		return true
 	}
 	return false
@@ -138,6 +138,7 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	root.AddCommand(newMCPCmd())
 	root.AddCommand(newIncidentsCmd())
 	root.AddCommand(newActionCmd())
+	root.AddCommand(newAlertCmd())
 	root.PersistentFlags().StringVar(&logFormat, "log-format", "", "structured logging: json | text (off unless set; KUBETECTIVE_LOG_FORMAT)")
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: debug | info | warn (KUBETECTIVE_LOG_LEVEL)")
 	return root
@@ -254,69 +255,20 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			collectors, _, clusterID, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL)
+			opts := investigateOptions{
+				noLogs:        noLogs,
+				kubeconfig:    kubeconfig,
+				context:       context,
+				prometheusURL: prometheusURL,
+				lokiURL:       lokiURL,
+				gitRepo:       gitRepo,
+			}
+			res, err := runInvestigationPipeline(cmd, target, since, opts)
 			if err != nil {
 				return err
-			}
-			eng := newEngine(collectors...)
-			req := &api.InvestigationRequest{
-				Target: target,
-				Window: api.Since(since),
-				Scope:  api.ScopeOptions{Logs: !noLogs},
-			}
-			res, err := eng.Investigate(cmd.Context(), req)
-			if err != nil {
-				return err
-			}
-			// Record every investigation (replay substrate).
-			store := record.NewDefaultStore()
-			inc := record.BuildIncident(engine.Version, req, res, clusterID)
-			if path, serr := store.Save(inc); serr == nil {
-				res.Meta.RecordID = path
-			}
-			slog.Info("investigation completed",
-				"target", target.String(),
-				"incident_id", filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
-				"cluster_id", clusterID,
-				"duration_ms", res.Meta.Duration.Milliseconds(),
-				"findings", len(res.Findings),
-				"record_id", res.Meta.RecordID,
-			)
-			// Opt-in completion webhook (v1.0 integration surface): fires
-			// after the investigation completes; HMAC-signed when a secret
-			// is configured. Never fails the investigation.
-			if url := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_URL"), st.WebhookURL); url != "" {
-				n := notify.Notification{
-					IncidentID:    filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
-					Target:        target.String(),
-					ClusterID:     clusterID,
-					EngineVersion: engine.Version,
-					RecordID:      res.Meta.RecordID,
-					DurationMs:    res.Meta.Duration.Milliseconds(),
-				}
-				if res.Incident != nil {
-					n.Status = res.Incident.Status
-				}
-				for _, f := range res.Findings {
-					n.Findings = append(n.Findings, notify.Finding{Analyzer: f.Analyzer, Severity: string(f.Severity), Title: f.Title})
-				}
-				secret := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_SECRET"), st.WebhookSecret)
-				if werr := notify.Send(cmd.Context(), url, secret, n); werr != nil {
-					fmt.Fprintf(os.Stderr, "note: webhook notification failed: %v\n", werr)
-				}
 			}
 			if format == "json" {
 				return renderJSON(res)
-			}
-			// Incident memory: "seen this before?" (v0.8) — surface similar
-			// past incidents before the main output.
-			if id := res.Meta.RecordID; id != "" {
-				if matches, merr := memory.Similar(store, filepath.Base(id), 3, clusterID); merr == nil && len(matches) > 0 {
-					fmt.Fprintf(os.Stderr, "note: similar past incident(s):\n")
-					for _, m := range matches {
-						fmt.Fprintf(os.Stderr, "  %s (overlap %.0f%%, %s) target=%s cluster=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target, clusterID)
-					}
-				}
 			}
 			// Optional AI synthesis: digest-only, validated, never
 			// authoritative - the engine's verdicts stand alone.
@@ -367,6 +319,87 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "OpenAI-compatible API base URL (or KUBETECTIVE_LLM_BASE_URL env; default https://api.openai.com/v1)")
 	cmd.Flags().StringVar(&llmAPIKey, "llm-api-key", "", "API key (or KUBETECTIVE_LLM_API_KEY env; not needed for local servers)")
 	return cmd
+}
+
+// investigateOptions carries the collector/scope settings shared by every
+// entry path that runs a live investigation.
+type investigateOptions struct {
+	noLogs        bool
+	kubeconfig    string
+	context       string
+	prometheusURL string
+	lokiURL       string
+	gitRepo       string
+}
+
+// runInvestigationPipeline is the one live investigation path, shared by
+// `investigate` and `alert`: wire collectors -> engine -> record -> webhook
+// -> memory note. The caller renders the result (text/JSON) and may add the
+// optional AI layer on top.
+func runInvestigationPipeline(cmd *cobra.Command, target model.ResourceRef, since time.Duration, opts investigateOptions) (*api.InvestigationResult, error) {
+	st := currentSettings.ForContext(config.FirstNonEmpty(opts.context, os.Getenv("KUBETECTIVE_CONTEXT"), currentSettings.Context))
+	collectors, _, clusterID, err := buildLiveCollectors(opts.kubeconfig, opts.context, opts.prometheusURL, opts.gitRepo, opts.lokiURL)
+	if err != nil {
+		return nil, err
+	}
+	eng := newEngine(collectors...)
+	req := &api.InvestigationRequest{
+		Target: target,
+		Window: api.Since(since),
+		Scope:  api.ScopeOptions{Logs: !opts.noLogs},
+	}
+	res, err := eng.Investigate(cmd.Context(), req)
+	if err != nil {
+		return nil, err
+	}
+	// Record every investigation (replay substrate).
+	store := record.NewDefaultStore()
+	inc := record.BuildIncident(engine.Version, req, res, clusterID)
+	if path, serr := store.Save(inc); serr == nil {
+		res.Meta.RecordID = path
+	}
+	slog.Info("investigation completed",
+		"target", target.String(),
+		"incident_id", filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
+		"cluster_id", clusterID,
+		"duration_ms", res.Meta.Duration.Milliseconds(),
+		"findings", len(res.Findings),
+		"record_id", res.Meta.RecordID,
+	)
+	// Opt-in completion webhook (v1.0 integration surface): fires after the
+	// investigation completes; HMAC-signed when a secret is configured.
+	// Never fails the investigation.
+	if url := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_URL"), st.WebhookURL); url != "" {
+		n := notify.Notification{
+			IncidentID:    filepath.Base(strings.TrimSuffix(res.Meta.RecordID, ".jsonl")),
+			Target:        target.String(),
+			ClusterID:     clusterID,
+			EngineVersion: engine.Version,
+			RecordID:      res.Meta.RecordID,
+			DurationMs:    res.Meta.Duration.Milliseconds(),
+		}
+		if res.Incident != nil {
+			n.Status = res.Incident.Status
+		}
+		for _, f := range res.Findings {
+			n.Findings = append(n.Findings, notify.Finding{Analyzer: f.Analyzer, Severity: string(f.Severity), Title: f.Title})
+		}
+		secret := config.FirstNonEmpty(os.Getenv("KUBETECTIVE_WEBHOOK_SECRET"), st.WebhookSecret)
+		if werr := notify.Send(cmd.Context(), url, secret, n); werr != nil {
+			fmt.Fprintf(os.Stderr, "note: webhook notification failed: %v\n", werr)
+		}
+	}
+	// Incident memory: "seen this before?" (v0.8) — surface similar past
+	// incidents before the main output.
+	if id := res.Meta.RecordID; id != "" {
+		if matches, merr := memory.Similar(store, filepath.Base(id), 3, clusterID); merr == nil && len(matches) > 0 {
+			fmt.Fprintf(os.Stderr, "note: similar past incident(s):\n")
+			for _, m := range matches {
+				fmt.Fprintf(os.Stderr, "  %s (overlap %.0f%%, %s) target=%s cluster=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target, clusterID)
+			}
+		}
+	}
+	return res, nil
 }
 
 func newReplayCmd() *cobra.Command {
