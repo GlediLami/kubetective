@@ -76,7 +76,7 @@ def main():
 
     output_lines = wrap_lines(output_lines)
     cols = max((len(l) for l in [f"$ {args.command}"] + output_lines if l), default=80)
-    rows = max(4, len(output_lines) + 3)
+    rows = max(4, len(output_lines) + 4)  # +1 for the closing "done" line
 
     W = PAD_X * 2 + max(80, cols * (FONT_SIZE * 0.62)) + 40
     H = PAD_Y * 2 + rows * LINE_H + 30
@@ -139,9 +139,13 @@ def main():
         drawn.append((line, color))
         for _ in range(max(1, min(4, len(line) // 40))):
             frames.append(make_frame(drawn, -1, True, 0))
-    # hold on the final screen with a blinking cursor (~4s so readers can take it in)
-    for t in range(88):
+    # final hold: 3 quick cursor blinks, then ONE long static frame. Long
+    # static-hold by duplicating frames would balloon the file (each GIF frame
+    # stores the whole image), so the final frame gets a patched, longer delay.
+    for t in range(6):
         frames.append(make_frame(drawn, -1, True, t))
+    done = drawn + [("✓ investigation complete — recorded & replayable", OK)]
+    frames.append(make_frame(done, -1, False, 0))
 
     out = Path(args.out)
     if not out.is_absolute():
@@ -155,7 +159,8 @@ def main():
         frames = [f.resize((w, h), Image.LANCZOS) for f in frames]
 
     frames[0].save(
-        out, save_all=True, append_images=frames[1:], duration=CHAR_MS, loop=0,
+        out, save_all=True, append_images=frames[1:],
+        duration=[CHAR_MS] * (len(frames) - 1) + [3900], loop=0,
         optimize=True, disposal=2,
     )
     print(f"wrote {out} ({len(frames)} frames, {out.stat().st_size / 1024:.0f} KB)")
