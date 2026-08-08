@@ -78,8 +78,26 @@ LATEST_TAG="$(git tag --sort=-version:refname | head -n1 || true)"
 if [ -z "$LATEST_TAG" ]; then
   wrn "no git tags found: skipping formula tag check (CI fetches tags)"
 else
+  # A release in flight is a LEGITIMATE one-gap state: the release flow
+  # pushes (bump commit, tag, formula) in sequence, so a CI run may start
+  # between the tag and the formula commits. Tolerate the gap ONLY while
+  # HEAD is the bump commit itself and the formula still pins the previous
+  # released version; any older drift is still a hard failure.
+  RELEASE_IN_FLIGHT=0
+  if ! grep -q "archive/refs/tags/${LATEST_TAG}.tar.gz" Formula/kubetective.rb; then
+    HEAD_MSG="$(git log -1 --format=%s 2>/dev/null || true)"
+    PREV_TAG="$(git tag --sort=-version:refname | sed -n '2p' || true)"
+    if [[ "$HEAD_MSG" == "chore: bump version to "${LATEST_TAG}"" ]] \
+       && [ -n "$PREV_TAG" ] \
+       && grep -q "archive/refs/tags/${PREV_TAG}.tar.gz" Formula/kubetective.rb; then
+      RELEASE_IN_FLIGHT=1
+      note "      (release in flight: HEAD is the ${LATEST_TAG} bump, formula pins ${PREV_TAG})"
+    fi
+  fi
   if grep -q "archive/refs/tags/${LATEST_TAG}.tar.gz" Formula/kubetective.rb; then
     ok "url pins latest tag ${LATEST_TAG}"
+  elif [ "$RELEASE_IN_FLIGHT" = 1 ]; then
+    ok "url pins previous tag ${PREV_TAG} while ${LATEST_TAG} bumps on HEAD (release in flight)"
   else
     bad "formula url != latest tag ${LATEST_TAG} (run hack/update-formula.sh ${LATEST_TAG})"
   fi

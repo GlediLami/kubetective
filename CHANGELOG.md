@@ -4,6 +4,19 @@ All notable changes to KubeTective are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 does **not** yet follow Semantic Versioning (0.x - API may change).
 
+## [Unreleased]
+
+### Fixed
+
+- The version-consistency gate no longer fails spuriously during the
+  release window: a CI run that starts between a version-bump commit and
+  the formula update (the release flow pushes main, tag, and formula in
+  sequence) now passes while HEAD is the bump commit and the formula still
+  pins the previous release; any older formula drift still fails.
+- Smoke gate: the actions E2E and the deployment assertion retry the
+  investigation until the recorded evidence carries the crash state,
+  instead of racing the CrashLoopBackOff oscillation window.
+
 ## [1.0.0] - 2026-08-08
 
 > **v1.0.0 GA declaration.** Three checklist items are **waived by owner
