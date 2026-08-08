@@ -14,6 +14,7 @@ import (
 
 	"github.com/GlediLami/kubetective/internal/action"
 	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
+	"github.com/GlediLami/kubetective/internal/memory"
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/record"
 	"github.com/GlediLami/kubetective/internal/server"
@@ -37,7 +38,7 @@ func newServeCmd() *cobra.Command {
   GET  /v1/incidents/{id} read a full incident record
   GET  /healthz          liveness`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "")
+			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
 			if err != nil {
 				return err
 			}
@@ -67,7 +68,7 @@ read-only tools: investigate, replay, list_incidents, read_incident,
 action_preview. Remediation stays human-gated in the CLI - there is
 deliberately no apply tool.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "")
+			collectors, _, err := buildLiveCollectors(kubeconfig, kubeCtx, "", "", "")
 			if err != nil {
 				return err
 			}
@@ -105,11 +106,13 @@ deliberately no apply tool.`,
 	return cmd
 }
 
-// newIncidentsCmd lists recorded incident ids.
+// newIncidentsCmd lists recorded incident ids (bare) and finds similar past
+// incidents (`similar <id>`, incident memory v0.8).
 func newIncidentsCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "incidents",
-		Short: "List recorded incidents",
+	var topN int
+	list := &cobra.Command{
+		Use:   "list",
+		Short: "List recorded incidents, newest first",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ids, err := record.NewDefaultStore().List()
 			if err != nil {
@@ -125,6 +128,39 @@ func newIncidentsCmd() *cobra.Command {
 			return nil
 		},
 	}
+	similar := &cobra.Command{
+		Use:   "similar <incident-id>",
+		Short: "Find similar past incidents (incident memory)",
+		Long: `Ranks past incidents by how similar their failure shape is to the
+given incident (Jaccard overlap of observation kinds: symptom set +
+change set). Incident memory v0.8.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			store := record.NewDefaultStore()
+			matches, err := memory.Similar(store, args[0], topN)
+			if err != nil {
+				return err
+			}
+			if len(matches) == 0 {
+				fmt.Printf("no similar past incidents for %s\n", args[0])
+				return nil
+			}
+			for _, m := range matches {
+				fmt.Printf("%-40s overlap %.0f%% (%s) target=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target)
+			}
+			return nil
+		},
+	}
+	similar.Flags().IntVar(&topN, "top", 5, "maximum matches to show (0 = all)")
+
+	cmd := &cobra.Command{
+		Use:   "incidents",
+		Short: "List recorded incidents",
+		RunE:  list.RunE,
+	}
+	cmd.AddCommand(list)
+	cmd.AddCommand(similar)
+	return cmd
 }
 
 // newActionCmd is the Phase 3/4 remediation surface:

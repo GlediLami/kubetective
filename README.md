@@ -35,7 +35,7 @@ RECOMMENDATION
 
 KubeTective's verdicts come from a rule-based engine, not an LLM. Each hypothesis
 score is a sum of weighted evidence terms you can read line by line. Confidence is
-calibrated against a scenario benchmark (15 recorded incidents with ground truth),
+calibrated against a scenario benchmark (16 recorded incidents with ground truth),
 and the calibration is validated leave-one-out before it is adopted. The optional
 LLM layer only explains the engine's verdict in plain language. It can never change
 scores, invent causes, or propose actions.
@@ -131,6 +131,7 @@ Optional evidence sources:
 kubetective investigate deployment/checkout \
   --since=30m \
   --prometheus-url=http://localhost:9090 \   # metric corroboration
+  --loki-url=http://localhost:3100 \         # log evidence (Loki)
   --git-repo=~/code/checkout-manifests       # commits touching your manifests
 ```
 
@@ -138,9 +139,10 @@ kubetective investigate deployment/checkout \
 
 | Command | Description |
 |---|---|
-| `kubetective investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--git-repo`, `--llm*`) |
+| `kubetective investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--loki-url`, `--git-repo`, `--llm*`) |
 | `kubetective replay <incident-id>` | Re-run a recorded investigation through the current engine (deterministic) |
 | `kubetective incidents` | List recorded incident ids, newest first |
+| `kubetective incidents similar <id>` | Find similar past incidents (incident memory, Jaccard overlap) |
 | `kubetective action <incident-id>` | Preview remediation actions (read-only; `--apply <id> --yes` to execute with approval) |
 | `kubetective benchmark [suite]` | Run the scenario suite gate. Exits 1 on any regression |
 | `kubetective evaluate [suite]` | Markdown evaluation report (per-category accuracy, calibration, FP check) |
@@ -158,6 +160,7 @@ or the default loading rules).
 | Environment variable | Purpose |
 |---|---|
 | `KUBETECTIVE_PROMETHEUS` | Prometheus base URL for metric evidence (same as `--prometheus-url`) |
+| `KUBETECTIVE_LOKI_URL` | Grafana Loki base URL for log evidence (same as `--loki-url`) |
 | `KUBETECTIVE_GIT_REPO` | Path to the manifests git checkout (same as `--git-repo`) |
 | `KUBETECTIVE_LLM_MODEL` | LLM model name for the explainer |
 | `KUBETECTIVE_LLM_BASE_URL` | OpenAI-compatible API base URL (default `https://api.openai.com/v1`) |
@@ -228,6 +231,9 @@ kubetective serve --listen :8080
 | `POST /v1/investigate` | Run an investigation; body: `{"target":"deployment/checkout","namespace":"prod","since_minutes":30}` |
 | `GET /v1/incidents` | List recorded incident ids |
 | `GET /v1/incidents/{id}` | Full incident record |
+| `GET /incidents/{id}` | Read-only web page for an incident |
+| `GET /` | Read-only web UI (incident list) |
+| `GET /metrics` | Self-telemetry (expvar counters) |
 | `GET /healthz` | Liveness |
 
 ## MCP server
@@ -255,7 +261,7 @@ and semantically separate from the engine's calibrated confidence.
 
 ## Scenario suite and evaluation
 
-`scenarios/` contains 15 recorded incidents with ground truth (root cause, expected
+`scenarios/` contains 16 recorded incidents with ground truth (root cause, expected
 top category, minimum score, expected findings). `kubetective benchmark` replays all
 of them and fails (exit 1) if any assertion regresses. This is the gate every
 analyzer and scoring change must pass.

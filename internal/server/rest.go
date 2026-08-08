@@ -31,6 +31,10 @@ func (s *REST) Handler() http.Handler {
 	mux.HandleFunc("POST /v1/investigate", s.handleInvestigate)
 	mux.HandleFunc("GET /v1/incidents", s.handleListIncidents)
 	mux.HandleFunc("GET /v1/incidents/{id}", s.handleGetIncident)
+	// Read-only web UI + self-telemetry (v0.8).
+	mux.HandleFunc("GET /", s.handleUI)
+	mux.HandleFunc("GET /incidents/{id}", s.handleIncidentUI)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	return withLogging(mux)
 }
 
@@ -61,9 +65,12 @@ func (s *REST) handleInvestigate(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := s.Inv.Investigate(r.Context(), req)
 	if err != nil {
+		investigationErr.Add(1)
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	investigations.Add(1)
+	investigationsOK.Add(1)
 	// Record every investigation (replay substrate) -
 	// same behavior as the CLI.
 	if s.Store != nil {

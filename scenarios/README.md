@@ -13,9 +13,9 @@ scenarios/oom-after-deploy/
 The benchmark gate (`kubetective benchmark`) is the contribution rule for new
 analyzers: an analyzer ships with a scenario, and the suite must stay green.
 
-Current suite (15): `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
+Current suite (16): `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
 `imagepull`, `pending-unschedulable`, `bad-readiness-probe`,
 `liveness-probe-failure`, `node-pressure`, `pvc-unschedulable`,
 `service-selector-mismatch`, `hpa-at-max`, `config-regression`,
-`gitops-drift`, `dns-failure`, and `healthy` (negative control - the engine
-must stay silent).
+`gitops-drift`, `dns-failure`, `dns-events-only` (secondary-signal lock),
+and `healthy` (negative control - the engine must stay silent).

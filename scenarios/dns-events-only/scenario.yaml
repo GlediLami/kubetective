@@ -1,0 +1,13 @@
+name: dns-events-only
+description: >-
+  DNS-flavored events with a crash-looping workload but NO coreDNS
+  observation (kube-system may be hidden by RBAC). The DNS analyzer fires
+  as a WARNING secondary signal; the crashloop hypothesis stays top.
+ground_truth:
+  root_cause: "Application crash loop with DNS-resolution errors in events"
+  top_hypothesis_category: crashloop
+  min_score: 0.8
+  expected_finding_analyzers:
+    - crashloop
+    - dns
+  expected_status: CRASHLOOPBACKOFF

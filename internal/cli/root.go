@@ -34,6 +34,8 @@ import (
 	gitcollect "github.com/GlediLami/kubetective/internal/collect/git"
 	gitopscollect "github.com/GlediLami/kubetective/internal/collect/gitops"
 	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
+	lokicollect "github.com/GlediLami/kubetective/internal/collect/loki"
+	"github.com/GlediLami/kubetective/internal/memory"
 	promcollect "github.com/GlediLami/kubetective/internal/collect/prometheus"
 	"github.com/GlediLami/kubetective/internal/engine"
 	"github.com/GlediLami/kubetective/internal/llm"
@@ -128,9 +130,10 @@ func newEngine(collectors ...collect.Collector) *engine.Engine {
 
 // buildLiveCollectors wires the optional telemetry + gitops collectors on
 // top of the Kubernetes collector: k8s first (staged collection), then
-// Prometheus (--prometheus-url / env), git (--git-repo / env), and GitOps
-// CRDs via a dynamic client when available.
-func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo string) ([]collect.Collector, kubernetes.Interface, error) {
+// Prometheus (--prometheus-url / env), Loki (--loki-url / env, log
+// evidence), git (--git-repo / env), and GitOps CRDs via a dynamic client
+// when available.
+func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL string) ([]collect.Collector, kubernetes.Interface, error) {
 	client, cfg, err := k8scollect.Client(kubeconfig, context)
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect to cluster: %w", err)
@@ -141,6 +144,12 @@ func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo string) ([]
 	}
 	if prometheusURL != "" {
 		collectors = append(collectors, promcollect.New(prometheusURL))
+	}
+	if lokiURL == "" {
+		lokiURL = os.Getenv("KUBETECTIVE_LOKI_URL")
+	}
+	if lokiURL != "" {
+		collectors = append(collectors, lokicollect.New(lokiURL))
 	}
 	if gitRepo == "" {
 		gitRepo = os.Getenv("KUBETECTIVE_GIT_REPO")
@@ -163,6 +172,7 @@ func newInvestigateCmd() *cobra.Command {
 		kubeconfig    string
 		context       string
 		prometheusURL string
+		lokiURL       string
 		gitRepo       string
 		llmEnabled    bool
 		llmModel      string
@@ -181,7 +191,7 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			collectors, _, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo)
+			collectors, _, err := buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo, lokiURL)
 			if err != nil {
 				return err
 			}
@@ -203,6 +213,16 @@ func newInvestigateCmd() *cobra.Command {
 			}
 			if format == "json" {
 				return renderJSON(res)
+			}
+			// Incident memory: "seen this before?" (v0.8) — surface similar
+			// past incidents before the main output.
+			if id := res.Meta.RecordID; id != "" {
+				if matches, merr := memory.Similar(store, filepath.Base(id), 3); merr == nil && len(matches) > 0 {
+					fmt.Fprintf(os.Stderr, "note: similar past incident(s):\n")
+					for _, m := range matches {
+						fmt.Fprintf(os.Stderr, "  %s (overlap %.0f%%, %s) target=%s\n", m.IncidentID, m.Overlap*100, memory.Describe(m.Overlap), m.Target)
+					}
+				}
 			}
 			// Optional AI synthesis: digest-only, validated, never
 			// authoritative - the engine's verdicts stand alone.
@@ -246,6 +266,7 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
 	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBETECTIVE_PROMETHEUS env) for metric evidence")
+	cmd.Flags().StringVar(&lokiURL, "loki-url", "", "Grafana Loki base URL (or KUBETECTIVE_LOKI_URL env) for log evidence")
 	cmd.Flags().StringVar(&gitRepo, "git-repo", "", "path to the manifests git checkout (or KUBETECTIVE_GIT_REPO env) for commit evidence")
 	cmd.Flags().BoolVar(&llmEnabled, "llm", false, "enable the optional AI synthesis layer (digest-only, never authoritative)")
 	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model name (or KUBETECTIVE_LLM_MODEL env)")

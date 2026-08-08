@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Unit tests
+        run: go test ./...
+
+      # The scenario gate: any analyzer or scoring change must keep the
+      # whole suite green, and the evaluation gate exits 1 on failure.
+      - name: Benchmark gate
+        run: go run ./cmd/kubetective benchmark
+
+      - name: Evaluation gate
+        run: go run ./cmd/kubetective evaluate

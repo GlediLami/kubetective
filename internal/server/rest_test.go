@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -163,3 +164,46 @@ func TestParseRef(t *testing.T) {
 }
 
 var _ = filepath.Join
+
+func TestRESTWebUIAndMetrics(t *testing.T) {
+	store := record.NewStore(t.TempDir())
+	if _, err := store.Save(&model.Incident{ID: "inc-1", Meta: model.IncidentMeta{Target: "deployment/prod/checkout"}}); err != nil {
+		t.Fatal(err)
+	}
+	s := &REST{Inv: &scriptedInvestigator{res: testResult()}, Store: store}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	// Index page.
+	resp, err := http.Get(srv.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "KubeTective") {
+		t.Errorf("index: status=%d body=%q", resp.StatusCode, string(body)[:80])
+	}
+	// Incident page (the id is filled client-side from the URL).
+	resp, err = http.Get(srv.URL + "/incidents/inc-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), "KubeTective") {
+		t.Errorf("incident page: status=%d", resp.StatusCode)
+	}
+	// Metrics after one investigation.
+	resp, _ = http.Post(srv.URL+"/v1/investigate", "application/json", strings.NewReader(`{"target":"deployment/checkout"}`))
+	resp.Body.Close()
+	resp, err = http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), "kubetective_investigations_total") {
+		t.Errorf("metrics missing counters: %q", string(body)[:200])
+	}
+}

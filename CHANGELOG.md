@@ -8,15 +8,26 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ### Added
 
-- `v0.7` - DNS-failure analyzer (coreDNS-down + DNS-event evidence, live
-  kube-system fetch); liveness-probe-failure scenario (suite: 15 scenarios);
+- `v0.8` - Loki log collector (`--loki-url` / `KUBETECTIVE_LOKI_URL`):
+  log evidence for the adaptive loop from Loki, silent degradation;
+  incident memory v1 (`kubetective incidents similar <id>`, Jaccard
+  overlap of failure shapes, "seen this before" note on every
+  investigation); read-only web UI (`kubetective serve`: `GET /`,
+  `GET /incidents/{id}`); self-telemetry (`GET /metrics`, expvar);
+  GitHub Actions CI (build/vet/test/benchmark/evaluate gates);
+  `dns-events-only` scenario (suite: 16 scenarios).
+
+## [0.7] - 2026-08-08
+
+### Added
+
+- DNS-failure analyzer (coreDNS-down + DNS-event evidence, live kube-system
+  fetch); liveness-probe-failure scenario (suite: 15 scenarios);
   `kubetective evaluate` markdown evaluation report (per-scenario,
   per-category accuracy, calibration, false-positive check - CI gate);
   calibration hardening: leave-one-out validation, confidence dampening
   (ECE > 10%), and real adoption of the validated temperature via
   `~/.kubetective/config.json`.
-
-## [0.6] - 2026-08-07
 
 ### Added
 
