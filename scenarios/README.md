@@ -1,6 +1,6 @@
 # Scenarios — the open benchmark suite
 
-One directory per scenario (docs/DESIGN.md §17.2):
+One directory per scenario:
 
 ```
 scenarios/oom-after-deploy/
@@ -13,5 +13,9 @@ scenarios/oom-after-deploy/
 The benchmark gate (`kubedoctor benchmark`) is the contribution rule for new
 analyzers: an analyzer ships with a scenario, and the suite must stay green.
 
-Planned v0.1 suite: `oom-after-deploy`, `crashloop`, `imagepull`,
-`pending-unschedulable`.
+Current suite (15): `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
+`imagepull`, `pending-unschedulable`, `bad-readiness-probe`,
+`liveness-probe-failure`, `node-pressure`, `pvc-unschedulable`,
+`service-selector-mismatch`, `hpa-at-max`, `config-regression`,
+`gitops-drift`, `dns-failure`, and `healthy` (negative control — the engine
+must stay silent).

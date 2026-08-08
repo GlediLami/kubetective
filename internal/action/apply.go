@@ -16,7 +16,7 @@ import (
 const revisionAnnotation = "deployment.kubernetes.io/revision"
 
 // Applier executes approved actions against a cluster. Every Apply result is
-// recorded by the caller as an audit record (docs/DESIGN.md §14.5).
+// recorded by the caller as an audit record.
 type Applier struct {
 	kc kubernetes.Interface
 }

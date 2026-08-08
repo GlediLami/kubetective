@@ -2,7 +2,7 @@
 // pure functions over Observations: they share evidence, never state, so any
 // number of them can run in parallel and in any order.
 //
-// Contribution rule (docs/DESIGN.md §11): a new analyzer must ship with a
+// Contribution rule: a new analyzer must ship with a
 // scenario in scenarios/ and keep the benchmark gate green.
 package analyze
 

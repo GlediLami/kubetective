@@ -18,7 +18,7 @@ const mcpProtocolVersion = "2024-11-05"
 // MCPServer is a thin MCP wrapper over the same pipeline the CLI and REST
 // server use: a hand-rolled minimal JSON-RPC 2.0 server (initialize,
 // tools/list, tools/call, ping) speaking the Model Context Protocol over
-// stdio (docs/DESIGN.md §21.2: "MCP server (thin wrapper)").
+// stdio.
 //
 // Tools are read-only: investigate, replay, list_incidents, read_incident,
 // action_preview. There is deliberately no apply tool — remediation stays

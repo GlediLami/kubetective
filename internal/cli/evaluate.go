@@ -15,8 +15,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/pkg/api"
 )
 
-// newEvaluateCmd renders the full evaluation report (v0.7, docs/DESIGN.md
-// §18): per-scenario results, per-category accuracy, calibration incl.
+// newEvaluateCmd renders the full evaluation report (v0.7): per-scenario results, per-category accuracy, calibration incl.
 // leave-one-out hardening, and the false-positive check. Exit code 1 if the
 // gate fails — the CI entry point.
 func newEvaluateCmd() *cobra.Command {
@@ -43,7 +42,7 @@ Exit code 1 on any failure — CI gate.`,
 				return err
 			}
 			// Calibration hardening: adopt a leave-one-out-validated
-			// temperature (docs/DESIGN.md §9.4), persisted for every future
+			// temperature, persisted for every future
 			// invocation (server/MCP/CLI all load it at startup).
 			if c := suite.Calibration; c != nil && suite.LOO != nil && suite.LOO.Adopt && c.Points >= 10 {
 				if serr := config.Save(config.Config{Temperature: suite.LOO.Temperature}); serr == nil {
@@ -140,7 +139,7 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 			p("| recalibrated T adopted | %s |\n", adopt)
 		}
 		if c.DefaultECE > 0.10 {
-			p("\n> ⚠️ ECE exceeds 10%% — per docs/DESIGN.md §9.4 displayed confidence is dampened toward 50%%.\n")
+			p("\n> ⚠️ ECE exceeds 10%% — displayed confidence is dampened toward 50%% (calibration rule).\n")
 		}
 	} else {
 		p("_No scenario carries ground truth — calibration not computable._\n")

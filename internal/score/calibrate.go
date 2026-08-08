@@ -6,7 +6,7 @@ import (
 
 // CalibrationPoint is one benchmark verdict: the margin of the top hypothesis
 // and whether it matched ground truth. Calibration turns margins into
-// calibrated confidence (docs/DESIGN.md §9.4).
+// calibrated confidence.
 type CalibrationPoint struct {
 	Margin  float64
 	Correct bool
@@ -175,7 +175,7 @@ func eceLOO(points []CalibrationPoint) float64 {
 	return out
 }
 
-// Dampen implements docs/DESIGN.md §9.4: when the calibration ECE exceeds
+// Dampen implements the calibration rule: when the calibration ECE exceeds
 // 0.1, displayed confidence is lowered toward the conservative 50% default
 // proportionally to how far ECE is past the threshold. Well-calibrated
 // (ECE ≤ 0.1) output passes through unchanged.

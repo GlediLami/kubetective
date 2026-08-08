@@ -1,7 +1,6 @@
 // Package llm implements the optional LLM layer: a provider abstraction with
 // an OpenAI-compatible adapter (OpenAI, Ollama, vLLM, llama.cpp), a redacted
-// structured digest builder, and the constrained explainer (docs/DESIGN.md
-// §13).
+// structured digest builder, and the constrained explainer.
 //
 // Design constraints enforced here:
 //   - the LLM receives ONLY the redacted digest — never raw observations,

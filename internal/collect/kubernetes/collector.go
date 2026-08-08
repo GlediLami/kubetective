@@ -112,7 +112,7 @@ func (c *Collector) collectPod(ctx context.Context, scope *collect.ScopePlan, ns
 	obs = append(obs, c.ownerChainObservations(ctx, pod, res, refs[0])...)
 	// Scope expansion: fetch the top-level controller's state (Deployment /
 	// StatefulSet / DaemonSet) so a pod-target investigation can surface
-	// "the owning workload changed" (docs/DESIGN.md §8.1 Stage B).
+	// "the owning workload changed".
 	obs = append(obs, c.controllerStateObservation(ctx, pod, res, refs[0])...)
 	// Storage + routing context: PVCs backing the pod's volumes, services
 	// selecting the pod, and the HPA that manages it (v0.3 analyzers).

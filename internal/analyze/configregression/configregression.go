@@ -1,7 +1,7 @@
 // Package configregression implements the config-regression analyzer: it
 // links a change — a git commit touching the workload's manifests or a
 // GitOps reconcile — to the incident onset and builds the "configuration
-// regression" hypothesis (docs/DESIGN.md §11, v0.4).
+// regression" hypothesis.
 //
 // This is the analyzer that answers "what changed" with "who changed it and
 // why": the commit is the mechanism, its recency before the onset is the

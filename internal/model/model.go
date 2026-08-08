@@ -3,7 +3,6 @@
 //
 // Everything downstream of the collector boundary works with these types only —
 // raw API payloads, log lines, and annotations never leave the collector layer.
-// See docs/DESIGN.md §7.
 package model
 
 import "time"
@@ -31,7 +30,7 @@ type SourceRef struct {
 
 // Observation is the normalized fact emitted by a collector. Raw text never
 // flows downstream unredacted; it is parsed into Payload or quoted behind
-// the redaction policy (docs/DESIGN.md §14.3).
+// the redaction policy.
 type Observation struct {
 	ID         string         `json:"id"`   // content-hashed, stable for dedup
 	Kind       string         `json:"kind"` // e.g. "container.terminated", "config.changed", "metric.breach"
@@ -57,7 +56,7 @@ type Evidence struct {
 }
 
 // EdgeKind enumerates typed evidence-graph edges. CAUSED_BY is reserved for
-// analyzers that pass the causality discipline (docs/DESIGN.md §10); the LLM
+// analyzers that pass the causality discipline; the LLM
 // can never emit it.
 type EdgeKind string
 
@@ -150,7 +149,7 @@ type Hypothesis struct {
 	AIGenerated    bool               `json:"ai_generated,omitempty"`   // labeled, never CAUSED_BY-capable
 }
 
-// ScoreBreakdown is the explainable scoring output (docs/DESIGN.md §9).
+// ScoreBreakdown is the explainable scoring output.
 type ScoreBreakdown struct {
 	Margin      float64     `json:"margin"`
 	Temperature float64     `json:"temperature"`
@@ -187,7 +186,7 @@ const (
 	SevCritical Severity = "CRITICAL"
 )
 
-// Change is one entry in the "what changed?" ranking (docs/DESIGN.md §8.3).
+// Change is one entry in the "what changed?" ranking.
 type Change struct {
 	Resource    ResourceRef        `json:"resource"`
 	Description string             `json:"description"`
@@ -245,7 +244,7 @@ type ResultMeta struct {
 }
 
 // Incident is the recorded investigation — the replay and benchmark substrate.
-// Stored as JSONL: one Observation per line, append-only (docs/DESIGN.md §7.6).
+// Stored as JSONL: one Observation per line, append-only.
 type Incident struct {
 	ID           string                `json:"id"`
 	Meta         IncidentMeta          `json:"meta"`
@@ -272,7 +271,7 @@ type IncidentResultRecord struct {
 
 // EvidenceRequest describes evidence an analyzer would need to strengthen or
 // refute a live hypothesis — this drives the adaptive collection loop
-// (docs/DESIGN.md §8.4). Lives in model so the collect boundary can carry it
+//. Lives in model so the collect boundary can carry it
 // without an analyze dependency.
 type EvidenceRequest struct {
 	HypothesisID string

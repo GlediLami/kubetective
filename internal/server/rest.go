@@ -17,7 +17,7 @@ import (
 
 // REST is the HTTP API: investigate on demand, list/read incident records.
 // The handler is a thin adapter over the same in-process pipeline the CLI
-// uses (docs/DESIGN.md §6.2: public Investigation API).
+// uses.
 type REST struct {
 	Inv   api.Investigator
 	Store *record.Store
@@ -64,7 +64,7 @@ func (s *REST) handleInvestigate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	// Record every investigation (replay substrate, docs/DESIGN.md §7.6) —
+	// Record every investigation (replay substrate) —
 	// same behavior as the CLI.
 	if s.Store != nil {
 		inc := record.BuildIncident(engine.Version, req, res)

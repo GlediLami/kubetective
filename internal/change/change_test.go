@@ -54,7 +54,7 @@ func TestRankPrefersTemporalAndOwnership(t *testing.T) {
 	if ranked[0].Resource != dep {
 		t.Fatalf("top change = %v, want deployment checkout (ownership + temporal)", ranked[0].Resource)
 	}
-	// Deterministic check of the formula (docs/DESIGN.md §8.3):
+	// Deterministic check of the formula:
 	// temporal = 1 − 14m/30m = 0.533; graph hops dep→rs→pod = 2 → 1/3 = 0.333;
 	// ownership = 1.0. relevance = 0.45·0.533 + 0.30·0.333 + 0.15·1.0 = 0.49.
 	if got, want := ranked[0].Relevance, 0.49; abs(got-want) > 0.01 {

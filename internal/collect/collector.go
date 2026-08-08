@@ -1,6 +1,6 @@
 // Package collect defines the collector boundary: raw data enters here and is
 // normalized into Observations. Nothing raw (log lines, annotations, secrets)
-// flows past this boundary. See docs/DESIGN.md §12.
+// flows past this boundary.
 package collect
 
 import (
@@ -12,10 +12,9 @@ import (
 
 // ScopePlan is what the engine hands a collector: the bounded worklist of
 // resources plus collection options for this investigation. Prior holds the
-// observations earlier collectors produced (staged collection, docs/DESIGN.md
-// §8.2) — e.g. the Prometheus collector derives pod targets from the
+// observations earlier collectors produced (staged collection) — e.g. the Prometheus collector derives pod targets from the
 // Kubernetes collector's pod.state observations. EvidenceRequests carries the
-// adaptive loop's targeted asks (docs/DESIGN.md §8.4).
+// adaptive loop's targeted asks.
 type ScopePlan struct {
 	Targets          []model.ResourceRef
 	Window           api.Window

@@ -17,7 +17,7 @@ import (
 // renderText renders the narrow, human-visible slice of the result:
 // header card → ROOT CAUSE → EVIDENCE → TIMELINE → WHAT CHANGED →
 // RELATIONSHIPS → GAPS → RECOMMENDATION → AI SYNTHESIS (optional).
-// "Collect more than you show" (docs/DESIGN.md §9/§5.2).
+// "Collect more than you show".
 func renderText(res *api.InvestigationResult, explanation *llm.Explanation) error {
 	w := os.Stdout
 	inc := res.Incident
@@ -182,7 +182,7 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 			fmt.Fprintf(w, "  hardening: LOO ECE %.1f%% (vs %.1f%% @T=26) → recalibrated T=%.1f %s\n",
 				l.LOOECE*100, l.DefaultECE*100, l.Temperature, adopt)
 		}
-		// docs/DESIGN.md §9.4: ECE > 0.1 → displayed confidence is dampened
+		// Calibration rule: ECE > 0.1 → displayed confidence is dampened
 		// toward the conservative 50% default.
 		if c.DefaultECE > 0.10 {
 			fmt.Fprintf(w, "  warning: ECE %.1f%% exceeds 10%% — displayed confidence dampened toward 50%% (score.Dampen)\n", c.DefaultECE*100)
@@ -197,7 +197,7 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 	}
 
 	// Calibration hardening: adopt a leave-one-out-validated temperature
-	// (docs/DESIGN.md §9.4), persisted for every future invocation — but only
+	//, persisted for every future invocation — but only
 	// when the gate passed, so a failing suite never mutates engine config.
 	if c := suite.Calibration; c != nil && suite.LOO != nil && suite.LOO.Adopt && c.Points >= 10 {
 		if err := config.Save(config.Config{Temperature: suite.LOO.Temperature}); err == nil {

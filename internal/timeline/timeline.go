@@ -2,7 +2,7 @@
 // anchored timeline. The anchor is the earliest "critical" observation
 // (terminations, waiting states) — everything is rendered relative to it
 // (t-14m, t+3m) so replays read identically across timezones
-// (docs/DESIGN.md §7.4).
+//.
 package timeline
 
 import (

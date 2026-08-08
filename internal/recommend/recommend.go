@@ -1,6 +1,6 @@
 // Package recommend implements the deterministic recommendation rule table:
 // the top hypothesis's category maps to a risk-leveled, evidence-linked
-// action (docs/DESIGN.md §14.5 — Phase 2, read-only). The LLM can paraphrase
+// action (Phase 2, read-only). The LLM can paraphrase
 // these later; it can never invent actions outside this table.
 package recommend
 

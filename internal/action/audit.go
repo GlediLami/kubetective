@@ -9,9 +9,8 @@ import (
 )
 
 // AuditRecord is the full trail of an applied action, appended to the
-// incident record as a JSONL line (docs/DESIGN.md §14.5: every action
-// record: user, timestamp, cluster, resource, action, arguments,
-// evidence_ids, reason, risk, approval, result).
+// incident record as a JSONL line: user, timestamp, cluster, resource,
+// action, arguments, evidence_ids, reason, risk, approval, result.
 type AuditRecord struct {
 	Kind        string            `json:"kind"` // "action.audit"
 	User        string            `json:"user"`

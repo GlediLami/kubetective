@@ -10,7 +10,7 @@ import (
 // Digest is the ONLY thing the LLM ever sees: a redacted, capped, sanitized
 // summary of the investigation. It deliberately excludes raw observations
 // (especially log.snippet), secrets, kubeconfig data, and free-form payload
-// values beyond short reason strings (docs/DESIGN.md §13, §14.2).
+// values beyond short reason strings.
 type Digest struct {
 	Incident   IncidentDigest   `json:"incident"`
 	Hypotheses []HypothesisDigest `json:"hypotheses"`

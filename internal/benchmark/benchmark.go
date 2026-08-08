@@ -2,7 +2,7 @@
 // (scenarios/<name>/) carries a ground-truth spec (scenario.yaml) and a
 // recorded investigation (record.jsonl). The gate replays the record through
 // the real engine and asserts the diagnosis — the contribution rule for new
-// analyzers (docs/DESIGN.md §11, §17.2).
+// analyzers.
 package benchmark
 
 import (
@@ -48,7 +48,7 @@ type Result struct {
 	TopHypothesis string
 	Score         float64
 	Status        string
-	// Margin and Correct feed confidence calibration (docs/DESIGN.md §9.4):
+	// Margin and Correct feed confidence calibration:
 	// did the top hypothesis match ground truth, and at what margin?
 	Margin           float64
 	Correct          bool

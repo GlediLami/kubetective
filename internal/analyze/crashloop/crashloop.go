@@ -219,7 +219,7 @@ func lastTs(ts []model.Observation) time.Time {
 
 func (a *Analyzer) NeedsEvidence(h model.Hypothesis) []analyze.EvidenceRequest {
 	// Exit cause unknown → container logs (tail) may reveal it; the adaptive
-	// loop fetches them in a second collection round (docs/DESIGN.md §8.4).
+	// loop fetches them in a second collection round.
 	var out []analyze.EvidenceRequest
 	for _, m := range h.Missing {
 		if strings.HasSuffix(m, ".exit-logs") {

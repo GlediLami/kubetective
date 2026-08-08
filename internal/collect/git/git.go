@@ -1,7 +1,7 @@
 // Package git implements the Git collector: it reads a local repository and
 // emits git.commit observations for commits that touched manifests matching
 // the investigation's target (workload name). This is the "who changed it and
-// why" half of the config-regression story (docs/DESIGN.md §12).
+// why" half of the config-regression story.
 //
 // The collector is optional and failure-tolerant: no repository configured or
 // an unreadable repo becomes a gap, never a failed investigation.

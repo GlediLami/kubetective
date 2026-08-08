@@ -10,3 +10,7 @@
 *.swp
 .idea/
 .vscode/
+
+# private design docs (not published)
+/docs/
+/prompt.txt

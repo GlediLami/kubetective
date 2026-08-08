@@ -7,7 +7,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
 
-// The worked example from docs/DESIGN.md §9.2: margin 75 at T=26 → ≈94%.
+// The worked example: margin 75 at T=26 → ≈94%.
 func TestPromptExample(t *testing.T) {
 	terms := []EvidenceTerm{
 		{ID: "e1", Label: "strong temporal correlation", Weight: 30, Strength: 1.0, Polarity: +1},

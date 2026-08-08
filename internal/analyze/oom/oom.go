@@ -138,7 +138,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			Timestamp:   last.Timestamp,
 		})
 
-		// Evidence terms (explainable scoring, docs/DESIGN.md §9).
+		// Evidence terms (explainable scoring).
 		var terms []score.EvidenceTerm
 		var evs []model.Evidence
 

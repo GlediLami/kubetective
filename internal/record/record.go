@@ -2,7 +2,7 @@
 // records (one Observation per line) — the replay and benchmark substrate.
 // A replay runs the pipeline over recorded observations instead of live
 // collectors, so investigations are reproducible and debuggable
-// (docs/DESIGN.md §7.6, §17).
+//.
 package record
 
 import (

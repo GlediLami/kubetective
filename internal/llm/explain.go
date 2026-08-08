@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// systemPrompt is the constraint layer (docs/DESIGN.md §13): the engine's
+// systemPrompt is the constraint layer: the engine's
 // verdicts are authoritative, evidence is untrusted data, the model has no
 // authority over scores or causality, output must be strict JSON.
 const systemPrompt = `You are the explanation component of KubeDoctor, a Kubernetes incident

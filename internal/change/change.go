@@ -1,7 +1,7 @@
 // Package change implements the "what changed?" detector: it turns
 // observations into ranked Change entries so an investigation can answer
 // "what happened right before the incident?" with a relevance score per
-// change (docs/DESIGN.md §8.3, §26).
+// change.
 package change
 
 import (
@@ -86,7 +86,7 @@ func dedup(changes []model.Change) []model.Change {
 // AnomalyScore returns 1.0 when a growing metric series co-occurs with the
 // change (within delta), else 0. This is the design's anomaly factor: metric
 // movement near a change is weak, non-causal corroboration — it raises the
-// change's relevance without claiming causation (docs/DESIGN.md §8.3).
+// change's relevance without claiming causation.
 func AnomalyScore(observations []model.Observation, ch model.Change, delta time.Duration) float64 {
 	for _, o := range observations {
 		if o.Kind != "metric.series" {
@@ -104,7 +104,7 @@ func AnomalyScore(observations []model.Observation, ch model.Change, delta time.
 	return 0
 }
 
-// Rank scores changes by relevance to the incident (docs/DESIGN.md §8.3):
+// Rank scores changes by relevance to the incident:
 //
 //	relevance = 0.45·temporal + 0.30·graph + 0.15·ownership + 0.10·anomaly
 //

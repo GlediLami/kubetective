@@ -30,7 +30,7 @@ func newServeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Run the REST API server",
-		Long: `Runs the REST API (docs/DESIGN.md §21.2 v0.6):
+		Long: `Runs the REST API:
 
   POST /v1/investigate   run an investigation
   GET  /v1/incidents     list recorded incidents
@@ -53,7 +53,7 @@ func newServeCmd() *cobra.Command {
 }
 
 // newMCPCmd runs the Model Context Protocol server over stdio (thin
-// wrapper over the same pipeline, docs/DESIGN.md §21.2 v0.6).
+// wrapper over the same pipeline).
 func newMCPCmd() *cobra.Command {
 	var (
 		kubeconfig string
@@ -127,7 +127,7 @@ func newIncidentsCmd() *cobra.Command {
 	}
 }
 
-// newActionCmd is the Phase 3/4 remediation surface (docs/DESIGN.md §14.5):
+// newActionCmd is the Phase 3/4 remediation surface:
 // preview is the default and touches nothing; --apply executes ONE action
 // after explicit --yes approval, and appends an audit record.
 func newActionCmd() *cobra.Command {
@@ -142,7 +142,7 @@ func newActionCmd() *cobra.Command {
 		Use:   "action <incident-id>",
 		Short: "Preview or apply remediation actions for an incident",
 		Long: `Deterministic, evidence-linked actions for a recorded incident
-(docs/DESIGN.md §14.5, phases 3-4).
+(phases 3-4 of the remediation model).
 
 Default: PREVIEW — read-only, contacts no cluster, prints the diff-style
 plan (kubectl equivalents, risk, evidence).

@@ -5,7 +5,7 @@
 //	→ record/report
 //
 // It is the only component that knows the pipeline order; collectors and
-// analyzers know nothing about each other (docs/DESIGN.md §6, §8).
+// analyzers know nothing about each other.
 package engine
 
 import (
@@ -33,7 +33,7 @@ var ErrNoCollectors = errors.New("engine: no collectors registered")
 // Version is stamped at build time (-ldflags "-X github.com/kubedoctor/kubedoctor/internal/engine.Version=...").
 var Version = "v0.7.0-dev"
 
-// Adaptive collection bounds (docs/DESIGN.md §8.4): at most two targeted
+// Adaptive collection bounds: at most two targeted
 // rounds, ≤5 requests, total cost ≤ requestBudget.
 const (
 	maxAdaptiveRounds = 2

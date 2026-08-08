@@ -1,7 +1,6 @@
 // Package api is the stable public KubeDoctor contract. The CLI, REST server,
 // MCP server, and web UI are all adapters over the Investigator interface —
 // there is exactly one investigation pipeline, with one request/result shape.
-// See docs/DESIGN.md §6.2.
 package api
 
 import (

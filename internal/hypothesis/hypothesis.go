@@ -1,6 +1,6 @@
 // Package hypothesis implements the rule-based hypothesis engine: it dedups
 // and merges analyzer-emitted candidates, reranks them, and applies
-// deterministic status rules (docs/DESIGN.md §8.4, §10).
+// deterministic status rules.
 //
 // The engine never fabricates hypotheses or evidence — it consolidates what
 // analyzers produced. Status rules:

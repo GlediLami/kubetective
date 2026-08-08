@@ -1,5 +1,5 @@
 // Package config persists the small set of engine settings that calibration
-// can adopt at runtime (docs/DESIGN.md §9.4): currently the calibrated
+// can adopt at runtime: currently the calibrated
 // temperature, stored in ~/.kubedoctor/config.json so every CLI invocation
 // (and the server/MCP modes) scores at the validated temperature.
 package config

@@ -1,7 +1,7 @@
 // Package graph builds the bounded in-memory evidence graph from normalized
 // observations: typed edges (OWNS, RUNS_ON, CHANGED_BEFORE) that the
 // investigation pipeline and the "what changed" ranking both consume
-// (docs/DESIGN.md §7.3).
+//.
 //
 // Edge discipline: structural edges (OWNS/RUNS_ON) come from API relationships
 // via resource.owner / pod.state observations; CHANGED_BEFORE comes from the
@@ -18,7 +18,7 @@ import (
 	"github.com/kubedoctor/kubedoctor/internal/model"
 )
 
-// Options bound graph size (large-cluster guard, docs/DESIGN.md §7.3).
+// Options bound graph size (large-cluster guard).
 type Options struct {
 	MaxNodes int
 	MaxEdges int
@@ -132,7 +132,7 @@ func Build(observations []model.Observation, changes []model.Change, onset *mode
 	}
 
 	// TEMPORALLY_CORRELATED edges: metric movement near a change (weak,
-	// explicitly non-causal — the edge kind says so, docs/DESIGN.md §7.3).
+	// explicitly non-causal — the edge kind says so.
 	for _, ch := range changes {
 		for _, o := range observations {
 			if o.Kind != "metric.series" {

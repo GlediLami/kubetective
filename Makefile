@@ -33,3 +33,12 @@ scenarios: build
 
 clean:
 	rm -rf $(BIN_DIR)
+
+VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
+
+# release tarball for GitHub releases (brew formula fetches the tag tarball)
+release:
+	mkdir -p dist
+	git archive --format=tar.gz --prefix=kubedoctor-$(VERSION)/ -o dist/kubedoctor-$(VERSION).tar.gz HEAD
+	shasum -a 256 dist/kubedoctor-$(VERSION).tar.gz | tee dist/kubedoctor-$(VERSION).tar.gz.sha256
+	@echo "upload dist/kubedoctor-$(VERSION).tar.gz to the GitHub release"

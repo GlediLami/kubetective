@@ -195,7 +195,7 @@ func newInvestigateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			// Record every investigation (replay substrate, docs/DESIGN.md §7.6).
+			// Record every investigation (replay substrate).
 			store := record.NewDefaultStore()
 			inc := record.BuildIncident(engine.Version, req, res)
 			if path, serr := store.Save(inc); serr == nil {
