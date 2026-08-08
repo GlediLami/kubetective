@@ -19,7 +19,8 @@ required.*
 ## What it finds in 30 seconds
 
 `kubectl investigate <target> --since=30m` turns an "everything looks fine?"
-moment into a ranked verdict with evidence:
+moment into a ranked verdict with evidence (the GIF above is the full
+output; this is the 5-second version):
 
 ```sh
 $ kubectl investigate deployment/checkout --since=30m
@@ -31,30 +32,15 @@ $ kubectl investigate deployment/checkout --since=30m
 ╰──────────────────────────────────────────────────╯
 
 ROOT CAUSE
-  Memory exhaustion: container terminated with OOMKilled 19 time(s) (memory limit 1Gi) - 19 restart(s) (incl. kubelet OOMKilling events)
-
-EVIDENCE
-  ✓ mechanism: OOMKilled ×19 (+20)
-  ✓ memory limit configured: 1Gi (+15)
-  ✓ reproduced after restart (×19) (+10)
-  ✓ strong temporal correlation (terminations in window) (+27)
-
-TIMELINE
-  14:06:03  (t+3m)  container.terminated OOMKilled
-  14:07:40  (t+5m)  container.terminated OOMKilled
-  14:09:17  (t+6m)  container.terminated OOMKilled
-  … (14 more)
-
-WHAT CHANGED
-  1. deployment/prod/checkout - deployment state observed (created or updated) (relevance 90%)
+  Memory exhaustion: container terminated with OOMKilled 19 time(s) (memory limit 1Gi) - 19 restart(s)
 
 RECOMMENDATION
-  roll back deployment/prod/checkout to the last known-good revision [MEDIUM] - memory exhaustion after a change - rollback reverts the configuration that grew memory past the limit
+  roll back deployment/prod/checkout to the last known-good revision [MEDIUM]
 ```
 
-That output is the recorded incident `scenarios/oom-after-deploy`
-replayed through the engine. 11 analyzers cover OOM kills, crash loops, image
-pull failures, scheduling failures, node pressure, probe failures, PVC issues,
+That output is the recorded incident `scenarios/oom-after-deploy` replayed
+through the engine. 11 analyzers cover OOM kills, crash loops, image pull
+failures, scheduling failures, node pressure, probe failures, PVC issues,
 service selector mismatches, HPA at max, DNS failures, and configuration
 regressions (Git/GitOps, down to the commit).
 
