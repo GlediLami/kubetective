@@ -13,6 +13,8 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/GlediLami/kub
 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/kubetective /usr/local/bin/kubetective
+COPY LICENSE /usr/share/licenses/kubetective/LICENSE
+COPY NOTICE /usr/share/licenses/kubetective/NOTICE
 # Incident store + config live on the default state dir; keep it writable
 # by the non-root user (65532).
 ENV KUBETECTIVE_HOME=/data/kubetective

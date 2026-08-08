@@ -52,6 +52,8 @@ nfpms:
     contents:
       - src: LICENSE
         dst: /usr/share/doc/kubetective/LICENSE
+      - src: NOTICE
+        dst: /usr/share/doc/kubetective/NOTICE
       - src: README.md
         dst: /usr/share/doc/kubetective/README.md
 
