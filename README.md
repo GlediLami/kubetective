@@ -11,27 +11,78 @@ investigation is recorded so it can be replayed, audited, and used as a benchmar
 
 Docs: [gledilami.github.io/kubetective](https://gledilami.github.io/kubetective/) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)
 
-```
+![demo](demo.gif)
+
+*The demo above is a replay of a recorded incident — no cluster, no credentials
+required.*
+
+## What it finds in 30 seconds
+
+`kubectl investigate <target> --since=30m` turns an "everything looks fine?"
+moment into a ranked verdict with evidence:
+
+```sh
 $ kubectl investigate deployment/checkout --since=30m
 ╭──────────────────────────────────────────────────╮
 │ INCIDENT: deployment/prod/checkout                 │
 │ Status: OOMKILLED                                   │
 │ Severity: HIGH                                       │
-│ Confidence: 94%                                      │
+│ Confidence: 100                                      │
 ╰──────────────────────────────────────────────────╯
 
 ROOT CAUSE
-  Memory exhaustion: container terminated with OOMKilled 1 time(s) (memory limit 1Gi) - 4 restart(s)
+  Memory exhaustion: container terminated with OOMKilled 19 time(s) (memory limit 1Gi) - 19 restart(s) (incl. kubelet OOMKilling events)
 
 EVIDENCE
-  ✓ mechanism: OOMKilled ×1 (+20)
+  ✓ mechanism: OOMKilled ×19 (+20)
   ✓ memory limit configured: 1Gi (+15)
-  ✓ reproduced after restart (×4) (+10)
+  ✓ reproduced after restart (×19) (+10)
   ✓ strong temporal correlation (terminations in window) (+27)
 
+TIMELINE
+  14:06:03  (t+3m)  container.terminated OOMKilled
+  14:07:40  (t+5m)  container.terminated OOMKilled
+  14:09:17  (t+6m)  container.terminated OOMKilled
+  … (14 more)
+
+WHAT CHANGED
+  1. deployment/prod/checkout - deployment state observed (created or updated) (relevance 90%)
+
 RECOMMENDATION
-  roll back deployment/prod/checkout to the last known-good revision [MEDIUM]
+  roll back deployment/prod/checkout to the last known-good revision [MEDIUM] - memory exhaustion after a change - rollback reverts the configuration that grew memory past the limit
 ```
+
+That output is real — it is the recorded incident `scenarios/oom-after-deploy`
+replayed through the engine. 11 analyzers cover OOM kills, crash loops, image
+pull failures, scheduling failures, node pressure, probe failures, PVC issues,
+service selector mismatches, HPA at max, DNS failures, and configuration
+regressions (Git/GitOps, down to the commit).
+
+## Try it in 5 minutes, no broken cluster needed
+
+```sh
+git clone https://github.com/GlediLami/kubetective.git && cd kubetective
+make build
+bin/kubetective replay scenarios/oom-after-deploy/record.jsonl   # a real incident, replayed
+bin/kubetective benchmark                                        # 16 scenarios vs. ground truth
+bin/kubetective evaluate                                         # markdown accuracy report
+```
+
+Every recorded incident in `scenarios/` is a self-contained, deterministic demo
+and doubles as the regression gate for every analyzer.
+
+## KubeTective vs. the status quo
+
+| | `kubectl` + grep + docs | LLM chat | KubeTective |
+|---|---|---|---|
+| Collects and correlates the facts | ✗ you dig | ✗ you paste | ✓ automatic (k8s, Prometheus, Loki, Git/GitOps) |
+| Ranked hypotheses with confidence | ✗ | ~ vibes | ✓ calibrated against ground truth |
+| Every verdict shows its evidence | ✗ | rarely | ✓ line-by-line score breakdown |
+| Verifiable with a recorded replay | ✗ | ✗ | ✓ JSONL records, re-run deterministically |
+| Change detection (what changed right before) | ✗ | ✗ | ✓ git commits, GitOps drift, pod changes |
+| Regression-tested on a scenario suite | ✗ | ✗ | ✓ `kubetective benchmark` in CI |
+| Safe remediation with approval | ✗ | ✗ | ✓ read-only preview → explicit `--yes` |
+| Works offline, no API key, no telemetry | ✓ | ✗ | ✓ |
 
 ## Why deterministic first?
 
@@ -40,7 +91,9 @@ score is a sum of weighted evidence terms you can read line by line. Confidence 
 calibrated against a scenario benchmark (16 recorded incidents with ground truth),
 and the calibration is validated leave-one-out before it is adopted. The optional
 LLM layer only explains the engine's verdict in plain language. It can never change
-scores, invent causes, or propose actions.
+scores, invent causes, or propose actions. Deterministic output means the same
+incident produces the same verdict in CI, in a demo, and in a replay — an LLM chat
+cannot be a regression test.
 
 ## Features
 
@@ -70,6 +123,20 @@ scores, invent causes, or propose actions.
   OpenAI-compatible endpoint (OpenAI, Ollama, vLLM, llama.cpp).
 - **kubectl plugin.** Drop the binary named `kubectl-investigate` on your `PATH`
   and run `kubectl investigate <resource>`.
+
+## Good first contributions
+
+- **Add a scenario.** Record a new incident with `kubetective record --from-live`,
+  add ground truth, and it becomes both a demo and a benchmark case.
+- **Harden an analyzer.** Pick one of the 11 analyzers, find a false positive
+  against the suite, fix the scoring, and let `kubetective benchmark` prove it.
+- **Improve the output.** The renderer is plain-ANSI box drawing; new output
+  formats (`--format=json` exists; a `sarif` or `slack` renderer is open).
+- **Wire a new evidence source** (e.g. Datadog, Grafana Cloud) behind the existing
+  collector interface.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the design rules — the benchmark is
+the contract.
 
 ## Install
 
