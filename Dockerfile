@@ -8,7 +8,7 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/GlediLami/kubetective/internal/engine.Version=v0.9.0-dev" \
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/GlediLami/kubetective/internal/engine.Version=v0.9.0" \
     -o /out/kubetective ./cmd/kubetective
 
 FROM gcr.io/distroless/static-debian12:nonroot
