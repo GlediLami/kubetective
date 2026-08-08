@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 func TestParseExplanationValid(t *testing.T) {

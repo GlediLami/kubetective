@@ -14,23 +14,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/change"
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/graph"
-	"github.com/kubedoctor/kubedoctor/internal/hypothesis"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/recommend"
-	"github.com/kubedoctor/kubedoctor/internal/score"
-	"github.com/kubedoctor/kubedoctor/internal/timeline"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/change"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/graph"
+	"github.com/GlediLami/kubetective/internal/hypothesis"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/recommend"
+	"github.com/GlediLami/kubetective/internal/score"
+	"github.com/GlediLami/kubetective/internal/timeline"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // ErrNoCollectors is returned when the engine is invoked without any wired
 // data source.
 var ErrNoCollectors = errors.New("engine: no collectors registered")
 
-// Version is stamped at build time (-ldflags "-X github.com/kubedoctor/kubedoctor/internal/engine.Version=...").
+// Version is stamped at build time (-ldflags "-X github.com/GlediLami/kubetective/internal/engine.Version=...").
 var Version = "v0.7.0-dev"
 
 // Adaptive collection bounds: at most two targeted

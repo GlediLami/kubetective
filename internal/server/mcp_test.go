@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 func mcpTestServer(t *testing.T) *MCPServer {
@@ -43,7 +43,7 @@ func TestMCPInitialize(t *testing.T) {
 		t.Errorf("protocolVersion = %v", res["protocolVersion"])
 	}
 	info := res["serverInfo"].(map[string]any)
-	if info["name"] != "kubedoctor" {
+	if info["name"] != "kubetective" {
 		t.Errorf("serverInfo = %v", info)
 	}
 }

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 func mk(kind string, res model.ResourceRef, payload map[string]any) model.Observation {

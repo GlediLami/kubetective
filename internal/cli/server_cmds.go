@@ -12,12 +12,12 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/kubedoctor/kubedoctor/internal/action"
-	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/internal/server"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/action"
+	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/internal/server"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // newServeCmd runs the REST API (v0.6: server mode).
@@ -42,7 +42,7 @@ func newServeCmd() *cobra.Command {
 				return err
 			}
 			rest := &server.REST{Inv: newEngine(collectors...), Store: record.NewDefaultStore()}
-			fmt.Printf("kubedoctor serve listening on %s\n", listen)
+			fmt.Printf("kubetective serve listening on %s\n", listen)
 			return http.ListenAndServe(listen, rest.Handler())
 		},
 	}
@@ -151,8 +151,8 @@ Apply:  --apply <action-id> --yes
         executes the single action on the cluster and appends an audit
         record (user, timestamp, resource, arguments, evidence, risk,
         approval, result) to the incident file.`,
-		Example: `  kubedoctor action incident-1786145202-checkout
-  kubedoctor action incident-1786145202-checkout --apply act-1a2b3c4d --yes`,
+		Example: `  kubetective action incident-1786145202-checkout
+  kubetective action incident-1786145202-checkout --apply act-1a2b3c4d --yes`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			store := record.NewDefaultStore()
@@ -244,7 +244,7 @@ func renderActionPreview(acts []action.Action) error {
 		}
 		fmt.Println()
 	}
-	fmt.Println("apply with: kubedoctor action <incident-id> --apply <id> --yes")
+	fmt.Println("apply with: kubetective action <incident-id> --apply <id> --yes")
 	return nil
 }
 

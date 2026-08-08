@@ -1,6 +1,6 @@
-# KubeDoctor — Kubernetes Incident Investigation Engine
+# KubeTective — Kubernetes Incident Investigation Engine
 
-KubeDoctor investigates Kubernetes incidents the way a good SRE would: it collects
+KubeTective investigates Kubernetes incidents the way a good SRE would: it collects
 facts about the target, builds a timeline and an evidence graph, generates ranked
 hypotheses with **explainable, deterministic scores**, and tells you *why* it thinks
 what it thinks — every point of confidence is backed by a visible list of evidence.
@@ -32,7 +32,7 @@ RECOMMENDATION
 
 ## Why deterministic first?
 
-KubeDoctor's verdicts come from a rule-based engine, not an LLM. Each hypothesis
+KubeTective's verdicts come from a rule-based engine, not an LLM. Each hypothesis
 score is a sum of weighted evidence terms that you can read line by line. Confidence
 is calibrated against a scenario benchmark (15 recorded incidents with ground truth),
 and the calibration is validated leave-one-out before it is adopted. The optional
@@ -52,10 +52,10 @@ change scores, invent causes, or propose actions.
   are calibrated against the scenario suite and validated with leave-one-out ECE.
 - **Timeline + evidence graph + change detection** — what happened, in what order,
   what owns what, and *what changed* right before the incident.
-- **Record / replay** — every investigation is appended to `~/.kubedoctor/incidents/`
+- **Record / replay** — every investigation is appended to `~/.kubetective/incidents/`
   as JSONL: replay it, diff engine versions, audit it.
-- **Scenario benchmark + evaluation report** — `kubedoctor benchmark` is the
-  regression gate for every analyzer; `kubedoctor evaluate` renders a markdown
+- **Scenario benchmark + evaluation report** — `kubetective benchmark` is the
+  regression gate for every analyzer; `kubetective evaluate` renders a markdown
   evaluation report (per-scenario, per-category accuracy, calibration, false-positive
   check) suitable for CI.
 - **Safe remediation** — actions (rollback, restart) are previewed read-only and
@@ -72,16 +72,16 @@ change scores, invent causes, or propose actions.
 ### Homebrew
 
 ```sh
-brew install kubedoctor/kubedoctor/kubedoctor
+brew install gledilami/kubetective/kubetective
 ```
 
-This installs both binaries: `kubedoctor` and `kubectl-investigate`
+This installs both binaries: `kubetective` and `kubectl-investigate`
 (the kubectl plugin).
 
 ### Go
 
 ```sh
-go install github.com/kubedoctor/kubedoctor/cmd/kubedoctor@latest
+go install github.com/GlediLami/kubetective/cmd/kubetective@latest
 ```
 
 ### From source
@@ -90,10 +90,10 @@ Requires Go ≥ 1.26 and a Kubernetes cluster (for live investigations; the
 benchmark runs without one).
 
 ```sh
-git clone https://github.com/kubedoctor/kubedoctor.git
-cd kubedoctor
-make build            # bin/kubedoctor + bin/kubectl-investigate
-make install          # kubedoctor → ~/.local/bin/kubedoctor
+git clone https://github.com/GlediLami/kubetective.git
+cd kubetective
+make build            # bin/kubetective + bin/kubectl-investigate
+make install          # kubetective → ~/.local/bin/kubetective
 make install-plugin   # kubectl-investigate → ~/.local/bin (kubectl plugin)
 ```
 
@@ -105,7 +105,7 @@ kubectl auto-discovers plugins named `kubectl-*` on `PATH`:
 
 ```sh
 make install-plugin
-kubectl investigate pod/checkout-7f84c9   # same as: kubedoctor investigate ...
+kubectl investigate pod/checkout-7f84c9   # same as: kubetective investigate ...
 ```
 
 ## Quick start
@@ -115,7 +115,7 @@ Investigate a crash-looping deployment (uses your current kubeconfig context):
 ```sh
 kubectl investigate deployment/checkout --since=30m
 # or without the plugin:
-kubedoctor investigate deployment/checkout --since=30m
+kubetective investigate deployment/checkout --since=30m
 ```
 
 Target forms: `pod/<name>`, `deployment/<name>`, `namespace/<name>` (or a bare
@@ -125,7 +125,7 @@ name, which defaults to a pod), optionally scoped with `--namespace` and a windo
 Optional evidence sources:
 
 ```sh
-kubedoctor investigate deployment/checkout \
+kubetective investigate deployment/checkout \
   --since=30m \
   --prometheus-url=http://localhost:9090 \   # metric corroboration
   --git-repo=~/code/checkout-manifests       # commits touching your manifests
@@ -135,34 +135,34 @@ kubedoctor investigate deployment/checkout \
 
 | Command | Description |
 |---|---|
-| `kubedoctor investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--git-repo`, `--llm*`) |
-| `kubedoctor replay <incident-id>` | Re-run a recorded investigation through the current engine (deterministic) |
-| `kubedoctor incidents` | List recorded incident ids, newest first |
-| `kubedoctor action <incident-id>` | Preview remediation actions (read-only; `--apply <id> --yes` to execute with approval) |
-| `kubedoctor benchmark [suite]` | Run the scenario suite gate — exit 1 on any regression |
-| `kubedoctor evaluate [suite]` | Markdown evaluation report (per-category accuracy, calibration, FP check) |
-| `kubedoctor serve --listen :8080` | REST API server |
-| `kubedoctor mcp` | MCP server over stdio (read-only tools) |
-| `kubedoctor version` | Print the engine version |
+| `kubetective investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--git-repo`, `--llm*`) |
+| `kubetective replay <incident-id>` | Re-run a recorded investigation through the current engine (deterministic) |
+| `kubetective incidents` | List recorded incident ids, newest first |
+| `kubetective action <incident-id>` | Preview remediation actions (read-only; `--apply <id> --yes` to execute with approval) |
+| `kubetective benchmark [suite]` | Run the scenario suite gate — exit 1 on any regression |
+| `kubetective evaluate [suite]` | Markdown evaluation report (per-category accuracy, calibration, FP check) |
+| `kubetective serve --listen :8080` | REST API server |
+| `kubetective mcp` | MCP server over stdio (read-only tools) |
+| `kubetective version` | Print the engine version |
 
-Run `kubedoctor <command> --help` for every flag.
+Run `kubetective <command> --help` for every flag.
 
 ## Configuration
 
-KubeDoctor reads kubeconfig the same way kubectl does (`--kubeconfig`,
+KubeTective reads kubeconfig the same way kubectl does (`--kubeconfig`,
 `--context`, or the default loading rules).
 
 | Environment variable | Purpose |
 |---|---|
-| `KUBEDOCTOR_PROMETHEUS` | Prometheus base URL for metric evidence (same as `--prometheus-url`) |
-| `KUBEDOCTOR_GIT_REPO` | Path to the manifests git checkout (same as `--git-repo`) |
-| `KUBEDOCTOR_LLM_MODEL` | LLM model name for the explainer |
-| `KUBEDOCTOR_LLM_BASE_URL` | OpenAI-compatible API base URL (default `https://api.openai.com/v1`) |
-| `KUBEDOCTOR_LLM_API_KEY` | API key (local servers like Ollama don't need one) |
-| `KUBEDOCTOR_HOME` | State directory (default `~/.kubedoctor`: incidents, config) |
-| `KUBEDOCTOR_CONFIG` | Config file path (default `~/.kubedoctor/config.json`) |
+| `KUBETECTIVE_PROMETHEUS` | Prometheus base URL for metric evidence (same as `--prometheus-url`) |
+| `KUBETECTIVE_GIT_REPO` | Path to the manifests git checkout (same as `--git-repo`) |
+| `KUBETECTIVE_LLM_MODEL` | LLM model name for the explainer |
+| `KUBETECTIVE_LLM_BASE_URL` | OpenAI-compatible API base URL (default `https://api.openai.com/v1`) |
+| `KUBETECTIVE_LLM_API_KEY` | API key (local servers like Ollama don't need one) |
+| `KUBETECTIVE_HOME` | State directory (default `~/.kubetective`: incidents, config) |
+| `KUBETECTIVE_CONFIG` | Config file path (default `~/.kubetective/config.json`) |
 
-The calibrated scoring temperature is persisted to `~/.kubedoctor/config.json`
+The calibrated scoring temperature is persisted to `~/.kubetective/config.json`
 by `benchmark`/`evaluate` and loaded by every invocation.
 
 ## How it works
@@ -181,7 +181,7 @@ kubectl investigate deployment/checkout
 ┌─────────────────┐   ┌──────────────────────────────────────┐
 │  Record +       │◀──│  Score (weighted evidence → margin →  │
 │  replay JSONL   │   │  calibrated confidence) + hypothesis  │
-│  ~/.kubedoctor/ │   │  engine (merge, rerank, outrank)      │
+│  ~/.kubetective/ │   │  engine (merge, rerank, outrank)      │
 └─────────────────┘   └──────────────────────────────────────┘
 ```
 
@@ -204,7 +204,7 @@ mechanism + direction + exclusivity) keep the output honest by construction.
 ## Safety model
 
 - **Read-only by default.** Investigation never mutates the cluster.
-- **Remediation is gated.** `kubedoctor action <incident-id>` only previews
+- **Remediation is gated.** `kubetective action <incident-id>` only previews
   (`kubectl rollout undo … --dry-run=client` equivalents). Applying requires
   `--apply <id> --yes` — an explicit human approval — and appends an audit
   record with user, timestamp, evidence, risk, and result to the incident file.
@@ -217,7 +217,7 @@ mechanism + direction + exclusivity) keep the output honest by construction.
 ## REST server
 
 ```sh
-kubedoctor serve --listen :8080
+kubetective serve --listen :8080
 ```
 
 | Endpoint | Description |
@@ -230,7 +230,7 @@ kubedoctor serve --listen :8080
 ## MCP server
 
 ```sh
-kubedoctor mcp   # JSON-RPC 2.0 over stdio
+kubetective mcp   # JSON-RPC 2.0 over stdio
 ```
 
 Tools: `investigate`, `replay`, `list_incidents`, `read_incident`,
@@ -241,9 +241,9 @@ remediation stays human-gated in the CLI.
 
 ```sh
 # OpenAI (or any compatible endpoint: Ollama, vLLM, llama.cpp)
-export KUBEDOCTOR_LLM_MODEL=gpt-4o-mini
-export KUBEDOCTOR_LLM_API_KEY=sk-...
-kubedoctor investigate deployment/checkout --llm
+export KUBETECTIVE_LLM_MODEL=gpt-4o-mini
+export KUBETECTIVE_LLM_API_KEY=sk-...
+kubetective investigate deployment/checkout --llm
 ```
 
 The output adds an `AI SYNTHESIS (non-authoritative)` section with a plain-language
@@ -253,13 +253,13 @@ visually and semantically separate from the engine's calibrated confidence.
 ## Scenario suite & evaluation
 
 `scenarios/` contains 15 recorded incidents with ground truth (root cause,
-expected top category, minimum score, expected findings). `kubedoctor benchmark`
+expected top category, minimum score, expected findings). `kubetective benchmark`
 replays all of them and fails (exit 1) if any assertion regresses — this is the
 gate every analyzer and scoring change must pass.
 
 ```sh
-make scenarios        # alias for: kubedoctor benchmark
-kubedoctor evaluate   # full markdown report, CI-friendly
+make scenarios        # alias for: kubetective benchmark
+kubetective evaluate   # full markdown report, CI-friendly
 ```
 
 Each scenario lives in its own directory: `scenario.yaml` (ground truth) +
@@ -277,7 +277,7 @@ make build test vet fmt tidy
   calibration, timeline, graph, actions, REST/MCP protocols have dedicated suites).
 - Adding an analyzer: implement `analyze.Analyzer` (see `internal/analyze/` for
   worked examples), register it in `internal/cli/root.go`, and add a scenario
-  proving it — `kubedoctor benchmark` must stay green.
+  proving it — `kubetective benchmark` must stay green.
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`SECURITY.md`](SECURITY.md).
 

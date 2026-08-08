@@ -1,6 +1,6 @@
 // Package config persists the small set of engine settings that calibration
 // can adopt at runtime: currently the calibrated
-// temperature, stored in ~/.kubedoctor/config.json so every CLI invocation
+// temperature, stored in ~/.kubetective/config.json so every CLI invocation
 // (and the server/MCP modes) scores at the validated temperature.
 package config
 
@@ -16,25 +16,25 @@ type Config struct {
 	Temperature float64 `json:"temperature,omitempty"`
 }
 
-// Path returns the config file location (KUBEDOCTOR_CONFIG overrides).
+// Path returns the config file location (KUBETECTIVE_CONFIG overrides).
 func Path() string {
-	if p := os.Getenv("KUBEDOCTOR_CONFIG"); p != "" {
+	if p := os.Getenv("KUBETECTIVE_CONFIG"); p != "" {
 		return p
 	}
 	return filepath.Join(DefaultDir(), "config.json")
 }
 
-// DefaultDir returns the KubeDoctor state directory (mirrors the record
+// DefaultDir returns the KubeTective state directory (mirrors the record
 // store's default).
 func DefaultDir() string {
-	if d := os.Getenv("KUBEDOCTOR_HOME"); d != "" {
+	if d := os.Getenv("KUBETECTIVE_HOME"); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".kubedoctor"
+		return ".kubetective"
 	}
-	return filepath.Join(home, ".kubedoctor")
+	return filepath.Join(home, ".kubetective")
 }
 
 // Load reads the config; a missing file yields the defaults (zero values —

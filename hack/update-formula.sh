@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Updates Formula/kubedoctor.rb with the release tarball URL + sha256.
+# Updates Formula/kubetective.rb with the release tarball URL + sha256.
 #
 # Usage:   hack/update-formula.sh <git-tag>
 # Example: hack/update-formula.sh v0.7.0
@@ -9,7 +9,7 @@
 set -euo pipefail
 
 VERSION="${1:?usage: hack/update-formula.sh <git-tag>}"
-REPO="${KUBEDOCTOR_REPO:-kubedoctor/kubedoctor}"
+REPO="${KUBETECTIVE_REPO:-GlediLami/kubetective}"
 URL="https://github.com/${REPO}/archive/refs/tags/${VERSION}.tar.gz"
 
 echo "fetching ${URL} ..."
@@ -19,9 +19,9 @@ if [ -z "${SHA}" ]; then
   exit 1
 fi
 
-FORMULA="Formula/kubedoctor.rb"
+FORMULA="Formula/kubetective.rb"
 sed -i.bak -E "s|url \".*\"|url \"${URL}\"|; s|sha256 \".*\"|sha256 \"${SHA}\"|" "${FORMULA}"
 rm -f "${FORMULA}.bak"
 
-echo "Formula/kubedoctor.rb updated:"
+echo "Formula/kubetective.rb updated:"
 grep -E 'url |sha256 ' "${FORMULA}"

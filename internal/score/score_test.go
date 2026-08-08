@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // The worked example: margin 75 at T=26 → ≈94%.

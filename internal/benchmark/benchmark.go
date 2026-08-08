@@ -15,11 +15,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/internal/score"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/internal/score"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // Scenario is the ground-truth spec of one benchmark scenario.

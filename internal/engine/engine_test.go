@@ -13,15 +13,15 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/analyze/crashloop"
+	"github.com/GlediLami/kubetective/internal/analyze/imagepull"
+	"github.com/GlediLami/kubetective/internal/analyze/oom"
+	"github.com/GlediLami/kubetective/internal/analyze/scheduling"
+	"github.com/GlediLami/kubetective/internal/collect"
+	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // testEngine wires the production collector + analyzer set (same as the CLI).

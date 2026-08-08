@@ -3,7 +3,7 @@ package hypothesis
 import (
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 func scored(id string, category model.HypothesisCategory, score float64) model.Hypothesis {

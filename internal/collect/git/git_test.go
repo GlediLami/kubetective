@@ -10,8 +10,8 @@ import (
 	gitgo "github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // buildTestRepo creates a temp git repo with two commits:

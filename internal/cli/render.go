@@ -6,12 +6,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/benchmark"
-	"github.com/kubedoctor/kubedoctor/internal/config"
-	"github.com/kubedoctor/kubedoctor/internal/llm"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/score"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/benchmark"
+	"github.com/GlediLami/kubetective/internal/config"
+	"github.com/GlediLami/kubetective/internal/llm"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/score"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // renderText renders the narrow, human-visible slice of the result:
@@ -134,7 +134,7 @@ func renderText(res *api.InvestigationResult, explanation *llm.Explanation) erro
 	fmt.Fprintf(w, "\n%d observations · %d sources · %s",
 		len(res.Observations), len(res.Meta.SourcesHit), res.Meta.Duration.Round(time.Millisecond))
 	if res.Meta.RecordID != "" {
-		fmt.Fprintf(w, "\nrecord: %s (replay with: kubedoctor replay <incident-id>)", res.Meta.RecordID)
+		fmt.Fprintf(w, "\nrecord: %s (replay with: kubetective replay <incident-id>)", res.Meta.RecordID)
 	}
 	fmt.Fprintln(w)
 	return nil

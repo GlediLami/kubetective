@@ -1,4 +1,4 @@
-// Package server exposes KubeDoctor over HTTP (REST) and MCP (stdio) —
+// Package server exposes KubeTective over HTTP (REST) and MCP (stdio) —
 // v0.6 roadmap: "REST API + server mode, MCP server (thin wrapper)".
 package server
 
@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/engine"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/engine"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // REST is the HTTP API: investigate on demand, list/read incident records.

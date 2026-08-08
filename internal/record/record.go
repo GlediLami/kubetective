@@ -17,23 +17,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 const RecordVersion = 1
 
-// DefaultDir is where incident records live (~/.kubedoctor/incidents).
+// DefaultDir is where incident records live (~/.kubetective/incidents).
 func DefaultDir() string {
-	if d := os.Getenv("KUBEDOCTOR_INCIDENTS_DIR"); d != "" {
+	if d := os.Getenv("KUBETECTIVE_INCIDENTS_DIR"); d != "" {
 		return d
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".kubedoctor/incidents"
+		return ".kubetective/incidents"
 	}
-	return filepath.Join(home, ".kubedoctor", "incidents")
+	return filepath.Join(home, ".kubetective", "incidents")
 }
 
 type Store struct{ dir string }
@@ -66,7 +66,7 @@ func BuildIncident(engineVersion string, req *api.InvestigationRequest, res *api
 	return &model.Incident{
 		ID: fmt.Sprintf("incident-%d-%s", time.Now().Unix(), slug(req.Target)),
 		Meta: model.IncidentMeta{
-			ClusterID:     os.Getenv("KUBEDOCTOR_CLUSTER_ID"),
+			ClusterID:     os.Getenv("KUBETECTIVE_CLUSTER_ID"),
 			EngineVersion: engineVersion,
 			RecordVersion: RecordVersion,
 			Target:        req.Target.String(),

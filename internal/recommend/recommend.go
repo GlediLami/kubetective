@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // ForTop returns recommendations for the top hypothesis. Evidence links are

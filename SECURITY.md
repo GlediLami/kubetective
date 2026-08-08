@@ -19,7 +19,7 @@ as we can assess the issue.
 
 ## Security model
 
-KubeDoctor is designed to be safe to run in production clusters. The invariants:
+KubeTective is designed to be safe to run in production clusters. The invariants:
 
 - **Read-only investigations.** The pipeline never mutates the cluster.
   Remediation actions (rollback, restart) are preview-only by default and

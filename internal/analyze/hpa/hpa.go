@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/score"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/score"
 )
 
 const (

@@ -1,4 +1,4 @@
-// Package api is the stable public KubeDoctor contract. The CLI, REST server,
+// Package api is the stable public KubeTective contract. The CLI, REST server,
 // MCP server, and web UI are all adapters over the Investigator interface —
 // there is exactly one investigation pipeline, with one request/result shape.
 package api
@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // Investigator runs the full investigation pipeline:

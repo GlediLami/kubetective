@@ -10,7 +10,7 @@ scenarios/oom-after-deploy/
 └── manifests/        # kind cluster setup (integration benchmark)
 ```
 
-The benchmark gate (`kubedoctor benchmark`) is the contribution rule for new
+The benchmark gate (`kubetective benchmark`) is the contribution rule for new
 analyzers: an analyzer ships with a scenario, and the suite must stay green.
 
 Current suite (15): `oom-after-deploy`, `oom-memory-growth`, `crashloop`,

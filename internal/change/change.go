@@ -8,9 +8,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/graph"
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/graph"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // changeEventReasons are event reasons that signal a meaningful change.

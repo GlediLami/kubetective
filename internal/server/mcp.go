@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/action"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/action"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // MCP protocol version we speak.
@@ -71,7 +71,7 @@ func (m *MCPServer) HandleMessage(msg []byte) ([]byte, error) {
 		return marshalRPC(req.ID, map[string]any{
 			"protocolVersion": mcpProtocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]string{"name": "kubedoctor", "version": "v0.6.0-dev"},
+			"serverInfo":      map[string]string{"name": "kubetective", "version": "v0.7.0-dev"},
 		}, nil), nil
 	case "ping":
 		out := marshalRPC(req.ID, map[string]any{}, nil)

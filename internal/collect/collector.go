@@ -6,8 +6,8 @@ package collect
 import (
 	"context"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // ScopePlan is what the engine hands a collector: the bounded worklist of

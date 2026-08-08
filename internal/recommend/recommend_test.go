@@ -3,7 +3,7 @@ package recommend
 import (
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 func scored(category model.HypothesisCategory) model.Hypothesis {

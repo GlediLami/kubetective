@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // NewObservation builds a normalized Observation with a stable content-hashed

@@ -9,10 +9,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/score"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/collect/prometheus"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/score"
 )
 
 const (

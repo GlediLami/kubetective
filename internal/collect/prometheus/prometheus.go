@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/collect"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // maxPods caps how many pods from Prior are queried (large-cluster guard).

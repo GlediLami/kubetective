@@ -3,8 +3,8 @@ package llm
 import (
 	"strings"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // Digest is the ONLY thing the LLM ever sees: a redacted, capped, sanitized

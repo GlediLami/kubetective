@@ -1,4 +1,4 @@
-// Package cli implements the kubedoctor / kubectl-investigate command line.
+// Package cli implements the kubetective / kubectl-investigate command line.
 // The two binaries share this root command; the kubectl plugin name
 // (kubectl-investigate) is what makes `kubectl investigate …` work.
 package cli
@@ -13,33 +13,33 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/configregression"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/crashloop"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/dns"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/hpa"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/imagepull"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/nodepressure"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/oom"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/probe"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/pvc"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/scheduling"
-	"github.com/kubedoctor/kubedoctor/internal/analyze/service"
-	"github.com/kubedoctor/kubedoctor/internal/benchmark"
-	"github.com/kubedoctor/kubedoctor/internal/config"
-	"github.com/kubedoctor/kubedoctor/internal/score"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/analyze/configregression"
+	"github.com/GlediLami/kubetective/internal/analyze/crashloop"
+	"github.com/GlediLami/kubetective/internal/analyze/dns"
+	"github.com/GlediLami/kubetective/internal/analyze/hpa"
+	"github.com/GlediLami/kubetective/internal/analyze/imagepull"
+	"github.com/GlediLami/kubetective/internal/analyze/nodepressure"
+	"github.com/GlediLami/kubetective/internal/analyze/oom"
+	"github.com/GlediLami/kubetective/internal/analyze/probe"
+	"github.com/GlediLami/kubetective/internal/analyze/pvc"
+	"github.com/GlediLami/kubetective/internal/analyze/scheduling"
+	"github.com/GlediLami/kubetective/internal/analyze/service"
+	"github.com/GlediLami/kubetective/internal/benchmark"
+	"github.com/GlediLami/kubetective/internal/config"
+	"github.com/GlediLami/kubetective/internal/score"
 	"k8s.io/client-go/dynamic"
 
-	"github.com/kubedoctor/kubedoctor/internal/collect"
-	gitcollect "github.com/kubedoctor/kubedoctor/internal/collect/git"
-	gitopscollect "github.com/kubedoctor/kubedoctor/internal/collect/gitops"
-	k8scollect "github.com/kubedoctor/kubedoctor/internal/collect/kubernetes"
-	promcollect "github.com/kubedoctor/kubedoctor/internal/collect/prometheus"
-	"github.com/kubedoctor/kubedoctor/internal/engine"
-	"github.com/kubedoctor/kubedoctor/internal/llm"
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/internal/record"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/collect"
+	gitcollect "github.com/GlediLami/kubetective/internal/collect/git"
+	gitopscollect "github.com/GlediLami/kubetective/internal/collect/gitops"
+	k8scollect "github.com/GlediLami/kubetective/internal/collect/kubernetes"
+	promcollect "github.com/GlediLami/kubetective/internal/collect/prometheus"
+	"github.com/GlediLami/kubetective/internal/engine"
+	"github.com/GlediLami/kubetective/internal/llm"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/internal/record"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // Execute runs the root command and exits with a non-zero code on failure.
@@ -79,9 +79,9 @@ func isKnownCommand(arg string) bool {
 
 func newRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "kubedoctor",
-		Short: "KubeDoctor — Kubernetes incident investigation engine",
-		Long: `KubeDoctor investigates Kubernetes incidents: it collects facts, builds a
+		Use:   "kubetective",
+		Short: "KubeTective — Kubernetes incident investigation engine",
+		Long: `KubeTective investigates Kubernetes incidents: it collects facts, builds a
 timeline and evidence graph, generates hypotheses, and renders an
 evidence-backed explanation. Deterministic first, AI second.
 
@@ -137,13 +137,13 @@ func buildLiveCollectors(kubeconfig, context, prometheusURL, gitRepo string) ([]
 	}
 	collectors := []collect.Collector{k8scollect.New(client)}
 	if prometheusURL == "" {
-		prometheusURL = os.Getenv("KUBEDOCTOR_PROMETHEUS")
+		prometheusURL = os.Getenv("KUBETECTIVE_PROMETHEUS")
 	}
 	if prometheusURL != "" {
 		collectors = append(collectors, promcollect.New(prometheusURL))
 	}
 	if gitRepo == "" {
-		gitRepo = os.Getenv("KUBEDOCTOR_GIT_REPO")
+		gitRepo = os.Getenv("KUBETECTIVE_GIT_REPO")
 	}
 	if gitRepo != "" {
 		collectors = append(collectors, gitcollect.New(gitRepo))
@@ -210,21 +210,21 @@ func newInvestigateCmd() *cobra.Command {
 			if llmEnabled {
 				model := llmModel
 				if model == "" {
-					model = os.Getenv("KUBEDOCTOR_LLM_MODEL")
+					model = os.Getenv("KUBETECTIVE_LLM_MODEL")
 				}
 				base := llmBaseURL
 				if base == "" {
-					base = os.Getenv("KUBEDOCTOR_LLM_BASE_URL")
+					base = os.Getenv("KUBETECTIVE_LLM_BASE_URL")
 				}
 				if base == "" {
 					base = "https://api.openai.com/v1"
 				}
 				key := llmAPIKey
 				if key == "" {
-					key = os.Getenv("KUBEDOCTOR_LLM_API_KEY")
+					key = os.Getenv("KUBETECTIVE_LLM_API_KEY")
 				}
 				if model == "" {
-					return fmt.Errorf("--llm requires a model (--llm-model or KUBEDOCTOR_LLM_MODEL)")
+					return fmt.Errorf("--llm requires a model (--llm-model or KUBETECTIVE_LLM_MODEL)")
 				}
 				digest := llm.BuildDigest(res, 3, 12, 5)
 				exp, xerr := llm.NewExplainer(llm.NewOpenAICompatible(base, model, key)).Explain(cmd.Context(), digest)
@@ -245,12 +245,12 @@ func newInvestigateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&format, "format", "text", "output format: text | json")
 	cmd.Flags().StringVar(&kubeconfig, "kubeconfig", "", "path to kubeconfig (default: KUBECONFIG or ~/.kube/config)")
 	cmd.Flags().StringVar(&context, "context", "", "kubeconfig context to use")
-	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBEDOCTOR_PROMETHEUS env) for metric evidence")
-	cmd.Flags().StringVar(&gitRepo, "git-repo", "", "path to the manifests git checkout (or KUBEDOCTOR_GIT_REPO env) for commit evidence")
+	cmd.Flags().StringVar(&prometheusURL, "prometheus-url", "", "Prometheus base URL (or KUBETECTIVE_PROMETHEUS env) for metric evidence")
+	cmd.Flags().StringVar(&gitRepo, "git-repo", "", "path to the manifests git checkout (or KUBETECTIVE_GIT_REPO env) for commit evidence")
 	cmd.Flags().BoolVar(&llmEnabled, "llm", false, "enable the optional AI synthesis layer (digest-only, never authoritative)")
-	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model name (or KUBEDOCTOR_LLM_MODEL env)")
-	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "OpenAI-compatible API base URL (or KUBEDOCTOR_LLM_BASE_URL env; default https://api.openai.com/v1)")
-	cmd.Flags().StringVar(&llmAPIKey, "llm-api-key", "", "API key (or KUBEDOCTOR_LLM_API_KEY env; not needed for local servers)")
+	cmd.Flags().StringVar(&llmModel, "llm-model", "", "LLM model name (or KUBETECTIVE_LLM_MODEL env)")
+	cmd.Flags().StringVar(&llmBaseURL, "llm-base-url", "", "OpenAI-compatible API base URL (or KUBETECTIVE_LLM_BASE_URL env; default https://api.openai.com/v1)")
+	cmd.Flags().StringVar(&llmAPIKey, "llm-api-key", "", "API key (or KUBETECTIVE_LLM_API_KEY env; not needed for local servers)")
 	return cmd
 }
 

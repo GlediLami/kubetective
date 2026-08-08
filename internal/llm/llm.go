@@ -26,7 +26,7 @@ type Request struct {
 	JSON bool
 }
 
-// Provider is the minimal LLM surface KubeDoctor needs.
+// Provider is the minimal LLM surface KubeTective needs.
 type Provider interface {
 	Complete(ctx context.Context, req Request) (string, error)
 }

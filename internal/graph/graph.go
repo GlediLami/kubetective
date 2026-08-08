@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // Options bound graph size (large-cluster guard).

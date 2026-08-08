@@ -16,7 +16,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // outrankGap is the minimum score gap for the ruled-out rule: 0.25 on the

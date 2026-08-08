@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
-	"github.com/kubedoctor/kubedoctor/pkg/api"
+	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // fakeInvestigator returns canned results — isolates the gate's assertion

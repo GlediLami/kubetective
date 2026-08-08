@@ -11,7 +11,7 @@ package score
 import (
 	"math"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // DefaultTemperature is the initial T. Calibration fits it (and per-category

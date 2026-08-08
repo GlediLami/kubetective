@@ -1,4 +1,4 @@
-# Contributing to KubeDoctor
+# Contributing to KubeTective
 
 Thanks for contributing! This document covers the development workflow, the
 contribution rule for analyzers, and how to cut a release.
@@ -8,7 +8,7 @@ contribution rule for analyzers, and how to cut a release.
 Requirements: Go ≥ 1.26.
 
 ```sh
-make build    # bin/kubedoctor + bin/kubectl-investigate
+make build    # bin/kubetective + bin/kubectl-investigate
 make test     # all unit tests
 make vet
 make fmt
@@ -32,7 +32,7 @@ Every new analyzer ships with a **scenario** that proves it:
    - `scenario.yaml` — ground truth: `root_cause`, `top_hypothesis_category`,
      `min_score`, `expected_finding_analyzers`, `expected_status`
      (or `expect_no_findings: true` for a negative control).
-4. `kubedoctor benchmark` must pass 15/15 — this is the regression gate.
+4. `kubetective benchmark` must pass 15/15 — this is the regression gate.
 
 Weight discipline: evidence weights follow the shared scale in
 `internal/score` (mechanism ≈20–30, temporal ≈25–30, corroboration ≈10–15).
@@ -61,15 +61,15 @@ Scores are calibrated against the suite; if your scenario changes calibration,
 
    ```sh
    hack/update-formula.sh v0.7.0
-   git add Formula/kubedoctor.rb && git commit -m "Formula: v0.7.0"
+   git add Formula/kubetective.rb && git commit -m "Formula: v0.7.0"
    git push origin main
    ```
 
 5. Users install with:
 
    ```sh
-   brew tap kubedoctor/kubedoctor https://github.com/kubedoctor/kubedoctor.git
-   brew install kubedoctor/kubedoctor/kubedoctor
+   brew tap gledilami/kubetective https://github.com/GlediLami/kubetective.git
+   brew install gledilami/kubetective/kubetective
    ```
 
 ## Security

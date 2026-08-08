@@ -1,4 +1,4 @@
-// Package model defines the core KubeDoctor data model: normalized observations,
+// Package model defines the core KubeTective data model: normalized observations,
 // evidence, the evidence graph, timeline, hypotheses, and incident records.
 //
 // Everything downstream of the collector boundary works with these types only —

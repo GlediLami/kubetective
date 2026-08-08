@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 // criticalKinds are observation kinds that signal incident onset.

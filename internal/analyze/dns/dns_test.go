@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kubedoctor/kubedoctor/internal/analyze"
-	"github.com/kubedoctor/kubedoctor/internal/model"
+	"github.com/GlediLami/kubetective/internal/analyze"
+	"github.com/GlediLami/kubetective/internal/model"
 )
 
 func obs(kind string, res model.ResourceRef, payload map[string]any, ts time.Time) model.Observation {

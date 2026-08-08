@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to KubeDoctor are documented here. The format is based on
+All notable changes to KubeTective are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 does **not** yet follow Semantic Versioning (0.x — API may change).
 
@@ -10,21 +10,21 @@ does **not** yet follow Semantic Versioning (0.x — API may change).
 
 - `v0.7` — DNS-failure analyzer (coreDNS-down + DNS-event evidence, live
   kube-system fetch); liveness-probe-failure scenario (suite: 15 scenarios);
-  `kubedoctor evaluate` markdown evaluation report (per-scenario,
+  `kubetective evaluate` markdown evaluation report (per-scenario,
   per-category accuracy, calibration, false-positive check — CI gate);
   calibration hardening: leave-one-out validation, confidence dampening
   (ECE > 10%), and real adoption of the validated temperature via
-  `~/.kubedoctor/config.json`.
+  `~/.kubetective/config.json`.
 
 ## [0.6] — 2026-08-07
 
 ### Added
 
-- REST server (`kubedoctor serve`): `POST /v1/investigate`,
+- REST server (`kubetective serve`): `POST /v1/investigate`,
   `GET /v1/incidents[/{id}]`, `/healthz`.
-- MCP server over stdio (`kubedoctor mcp`): read-only tools
+- MCP server over stdio (`kubetective mcp`): read-only tools
   (investigate, replay, list_incidents, read_incident, action_preview).
-- Preview actions + human approval (`kubedoctor action <incident-id>`;
+- Preview actions + human approval (`kubetective action <incident-id>`;
   `--apply <id> --yes`), audit records appended to incident files.
 
 ## [0.5] — 2026-08-07

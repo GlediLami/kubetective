@@ -1,4 +1,4 @@
-module github.com/kubedoctor/kubedoctor
+module github.com/GlediLami/kubetective
 
 go 1.26.0
 
