@@ -86,7 +86,7 @@ def main():
         lines.append(l)
 
     # 2) build frames: type the command, then stream the output
-    CHAR_MS = max(12, int(42 / args.charm_s))
+    CHAR_MS = max(12, int(45 / args.charm_s))
     frames = []
 
     def make_frame(drawn, cursor_x, show_cursor, flash):
@@ -102,7 +102,9 @@ def main():
             y += LINE_H
         if show_cursor:
             x = PAD_X + 12 + cursor_x
-            d.rectangle([x, y - LINE_H + 3, x + CELL, y - 3], fill=PROMPT if (flash % 2) else TEXT)
+            # distinct white block so the cursor never blends into the prompt text
+            d.rectangle([x, y - LINE_H + 3, x + CELL, y - 3],
+                        fill=(235, 238, 242) if (flash % 2) else (105, 118, 132))
         return img
 
     # phases ---------------------------------------------------------------
@@ -111,12 +113,11 @@ def main():
     # intro: empty prompt + blinking cursor
     for t in range(8):
         frames.append(make_frame(drawn, 0, True, t))
-    # type the command (frame every other char — plenty for 25fps)
+    # type the command one character per frame (smooth, no skipped chars)
     acc = ""
     for i, ch in enumerate(cmd_text):
         acc += ch
-        if i % 2 == 0 or i == len(cmd_text) - 1:
-            frames.append(make_frame([(acc, PROMPT)], len(acc) * CELL, True, 0))
+        frames.append(make_frame([(acc, PROMPT)], len(acc) * CELL, True, 1))
     drawn = [(cmd_text, PROMPT)]
 
     # stream the real output line by line
