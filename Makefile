@@ -1,8 +1,9 @@
 GO      ?= go
 BIN_DIR ?= bin
 PREFIX  ?= $(HOME)/.local
+VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 
-.PHONY: build test vet fmt tidy install install-plugin scenarios clean
+.PHONY: build test vet fmt tidy install install-plugin scenarios clean check-version bump-version install-hooks release tarball
 
 build:
 	$(GO) build -o $(BIN_DIR)/kubetective ./cmd/kubetective
@@ -34,10 +35,31 @@ scenarios: build
 clean:
 	rm -rf $(BIN_DIR)
 
-VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
+# --- version maintenance (v0.9) -------------------------------------------------
+# The canonical version lives in internal/engine/engine.go; these targets
+# keep every other mention (Dockerfile, krew manifest, brew formula, tap
+# repo) in lockstep. check-version also runs in CI and as a pre-commit
+# hook (install-hooks).
 
-# release tarball for GitHub releases (brew formula fetches the tag tarball)
-release:
+check-version:
+	./hack/check-version.sh
+
+bump-version:
+	hack/bump-version.sh $(VERSION)
+
+install-hooks:
+	git config core.hooksPath .githooks
+	@echo "pre-commit hook installed (git config core.hooksPath = .githooks)"
+
+# One-command release: bump -> verify -> build/test -> tag -> push main+tag
+# -> brew formula -> tap repo sync. Use hack/release.sh vX.Y.Z --dry-run
+# to preview. VERSION must be set, e.g. `make release VERSION=v0.9.0`.
+release: check-version
+	hack/release.sh $(VERSION)
+
+# source tarball for GitHub releases (the brew formula fetches the tag
+# tarball; the formula sha is kept in sync by hack/update-formula.sh)
+tarball:
 	mkdir -p dist
 	git archive --format=tar.gz --prefix=kubetective-$(VERSION)/ -o dist/kubetective-$(VERSION).tar.gz HEAD
 	shasum -a 256 dist/kubetective-$(VERSION).tar.gz | tee dist/kubetective-$(VERSION).tar.gz.sha256

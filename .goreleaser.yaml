@@ -1,8 +1,8 @@
 # goreleaser configuration (roadmap v0.9): linux/darwin binaries, deb/rpm
 # packages, container image, checksums, SBOM. Release flow:
 #
-#   VERSION=v0.9.0 make release            # tag + push (see CONTRIBUTING.md)
-#   goreleaser release --clean
+#   make release VERSION=v0.9.0        # bump, tag, push, formula, tap (CONTRIBUTING.md)
+#   goreleaser release --clean         # publish binaries/containers from the tag
 #
 # Signing (cosign) and SBOM (syft) run only in CI where the cosign key is
 # available; locally they are skipped (env: COSIGN_PRIVATE_KEY unset).

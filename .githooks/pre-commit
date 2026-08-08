@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Pre-commit gate: every commit must keep all version sinks consistent
+# with internal/engine/engine.go. Local-only, no network.
+#
+# Install: make install-hooks   (sets git config core.hooksPath .githooks)
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+./hack/check-version.sh --quiet

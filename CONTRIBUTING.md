@@ -48,34 +48,44 @@ Scores are calibrated against the suite; if your scenario changes calibration,
 
 ## Releasing
 
-1. Bump the version in `internal/engine/engine.go` (e.g. `v0.7.0`).
-2. Commit, tag, push:
+The release flow is script-driven: the canonical version lives in
+`internal/engine/engine.go`, and `hack/check-version.sh` keeps every other
+mention — the Dockerfile stamp, the krew manifest, the brew formula — in
+lockstep. The check runs in CI and, once you run `make install-hooks`, as a
+pre-commit hook (no stale version can be committed).
+
+1. Install the pre-commit hook (once):
 
    ```sh
-   git tag v0.7.0
-   git push origin main --tags
+   make install-hooks
    ```
 
-3. (Optional) create a GitHub Release for the tag with the changelog entry.
-4. Update the brew formula and push it:
+2. Cut the release — this bumps the version everywhere, verifies
+   (build + vet + tests), commits, tags, pushes main + the tag, refreshes
+   the brew formula sha, and syncs the Homebrew tap repo:
 
    ```sh
-   hack/update-formula.sh v0.7.0
-   git add Formula/kubetective.rb && git commit -m "Formula: v0.7.0"
-   git push origin main
+   make release VERSION=v0.9.0
    ```
 
-5. Sync the formula to the Homebrew tap repo and push it:
+   Preview every step without changing anything:
 
    ```sh
-   git clone https://github.com/GlediLami/homebrew-kubetective.git /tmp/homebrew-kubetective
-   cp Formula/kubetective.rb /tmp/homebrew-kubetective/Formula/
-   cd /tmp/homebrew-kubetective
-   git add Formula/kubetective.rb && git commit -m "Formula: v0.7.0"
-   git push
+   hack/release.sh v0.9.0 --dry-run
    ```
 
-6. Users install with the one-liner (Homebrew auto-taps):
+3. Create the GitHub Release for the tag with the changelog entry, then
+   download the release assets and replace the krew manifest `sha256:
+   REPLACE_ME` values before submitting to the kubectl plugin index.
+
+4. Between releases, bump to a dev version (engine + Dockerfile + krew
+   manifest stay in lockstep):
+
+   ```sh
+   make bump-version VERSION=v0.9.0-dev
+   ```
+
+5. Users install with the one-liner (Homebrew auto-taps):
 
    ```sh
    brew install gledilami/kubetective/kubetective

@@ -54,3 +54,16 @@ jobs:
 
       - name: Run container smoke
         run: hack/smoke-container.sh
+
+  # Version consistency (v0.9): every hardcoded version sink must agree with
+  # internal/engine/engine.go. The pre-commit hook is the local gate; this
+  # job is the server-side gate that cannot be skipped.
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Version consistency
+        run: hack/check-version.sh
