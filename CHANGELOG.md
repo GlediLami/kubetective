@@ -6,6 +6,13 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-16
+
+Post-1.0 hardening. The theme is honesty about what the engine can and cannot
+support: a confidence number it refuses to fit without evidence, a benchmark
+that reports its own misses, and a release anyone can verify without trusting
+us.
+
 ### Added
 
 - **Mutation gate** — scenarios now declare what their verdict *depends on*
@@ -130,7 +137,7 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
   analyzer's real output across the suite. The outranking rule silently
   depended on the format with nothing checking it.
 
-### Fixed (earlier)
+### Fixed (pre-1.0.1, carried from Unreleased)
 
 - The version-consistency gate no longer fails spuriously during the
   release window: a CI run that starts between a version-bump commit and
