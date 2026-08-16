@@ -55,6 +55,15 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ### Fixed
 
+- **A unit test was overwriting the real user config.** `internal/diag` set
+  `KUBECTIVE_HOME` — one character short of `KUBETECTIVE_HOME` — so the
+  override silently never applied and every `go test ./...` run wrote
+  `{"temperature": 5}` into the developer's actual
+  `~/.kubetective/config.json`. That is the saturated temperature, so the test
+  suite was quietly re-arming the calibration bug below on every run. Typo
+  fixed, the config path pinned explicitly, and `internal/config` gained tests
+  asserting both overrides apply by name — a misspelled env var in a test does
+  not fail, it just escapes to `$HOME`.
 - **Confidence calibration was degenerate and self-persisting.** Expected
   calibration error is `|confidence - accuracy|`, so on a suite the engine
   never fails the error-minimising policy is to answer 100% every time. The

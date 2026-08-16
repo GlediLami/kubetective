@@ -14,7 +14,8 @@ import (
 
 func TestRunHealthyNoExtras(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("KUBECTIVE_HOME", dir)
+	t.Setenv("KUBETECTIVE_HOME", dir)
+	t.Setenv("KUBETECTIVE_CONFIG", filepath.Join(dir, "config.json"))
 	// An adopted temperature makes the calibration check OK.
 	if err := config.Save(config.Config{Temperature: 5.0}); err != nil {
 		t.Fatal(err)
@@ -65,7 +66,7 @@ func TestRunReportsFailures(t *testing.T) {
 
 func TestRunProbesSources(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("KUBECTIVE_HOME", dir)
+	t.Setenv("KUBETECTIVE_HOME", dir)
 	// Healthy source.
 	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ready" {

@@ -70,7 +70,7 @@ func (s Settings) merge(p Settings) Settings {
 }
 
 // SettingsPath returns the settings file location:
-// $KUBECTIVE_HOME/kubetective.yaml (default ~/.kubetective/kubetective.yaml).
+// $KUBETECTIVE_HOME/kubetective.yaml (default ~/.kubetective/kubetective.yaml).
 func SettingsPath() string {
 	return filepath.Join(DefaultDir(), "kubetective.yaml")
 }
