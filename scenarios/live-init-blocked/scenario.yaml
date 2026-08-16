@@ -1,0 +1,26 @@
+name: live-init-blocked
+description: >-
+  HARD SET, RECORDED LIVE. An init container polls for a database Service that
+  nobody ever deployed, and will keep polling forever. The pod is scheduled, the
+  image is pulled, nothing has crashed and nothing is being killed — it is
+  Init:0/1, quietly, for as long as anyone leaves it.
+
+  This is the hardest of the five because there is no failure event at all. No
+  OOMKill, no probe timeout, no eviction, no pull error: the only signal is
+  absence — a container that should have finished and has not. The engine
+  answers "Configuration regression: a change preceded the incident" at 79%,
+  the same contentless verdict it gives to
+  [live-missing-secret-mount] and [live-ephemeral-storage-evict], which is what
+  makes those three worth keeping together: one wrong answer arrived at from
+  three completely different incidents.
+
+  An engine that cannot explain an incident should say so. "I have no
+  hypothesis" is a supported outcome — the `healthy` scenario proves the engine
+  can stay silent — and it is the correct one here.
+ground_truth:
+  root_cause: >-
+    An init container blocks forever waiting for a Service that was never
+    deployed, so the pod never progresses past initialisation.
+  top_hypothesis_category: init-dependency
+  advisory: true
+  max_score: 0.60

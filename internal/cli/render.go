@@ -239,8 +239,12 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 		fmt.Fprintf(w, "calibration: %d ground-truth points (%d incorrect), accuracy %.0f%% - ECE %.1f%% @T=%.0f → ECE %.1f%% @T=%.1f\n",
 			c.Points, incorrectCount(suite), c.Accuracy*100, c.DefaultECE*100, score.DefaultTemperature, c.ECE*100, c.Temperature)
 		if l := suite.LOO; l != nil {
-			fmt.Fprintf(w, "  hardening: LOO ECE %.1f%% (vs %.1f%% @T=%.0f) → candidate T=%.1f\n",
-				l.LOOECE*100, l.DefaultECE*100, score.DefaultTemperature, l.Temperature)
+			// The decision runs on out-of-sample proper scoring rules; ECE is
+			// printed because it is the interpretable number, not because
+			// anything hangs on it.
+			fmt.Fprintf(w, "  hardening: out-of-sample NLL %.4f vs %.4f, Brier %.4f vs %.4f (default T=%.0f) → candidate T=%.1f\n",
+				l.LOONLL, l.DefaultNLL, l.LOOBrier, l.DefaultBrier, score.DefaultTemperature, l.Temperature)
+			fmt.Fprintf(w, "             LOO ECE %.1f%% (reported; binned, so it does not gate adoption)\n", l.LOOECE*100)
 			if !l.Adopt {
 				fmt.Fprintf(w, "  not adopted: %s\n", l.RefusalReason)
 				fmt.Fprintf(w, "  engine stays at the default T=%.0f\n", score.DefaultTemperature)

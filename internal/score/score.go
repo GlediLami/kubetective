@@ -33,6 +33,22 @@ func SetTemperature(t float64) {
 	}
 }
 
+// PinTemperature forces the operating temperature for a bounded stretch of
+// work and returns the restore function — `defer PinTemperature(T)()`.
+//
+// This exists for the benchmark, which must grade scenarios at a fixed
+// reference temperature rather than at whatever the engine currently operates
+// at. Ground truth thresholds are written against a scale; if the scale moves
+// under them they stop measuring what they were written to measure. See
+// benchmark.RunSuite for the failure this prevents.
+func PinTemperature(t float64) func() {
+	prev := CurrentTemperature
+	if t > 0 {
+		CurrentTemperature = t
+	}
+	return func() { CurrentTemperature = prev }
+}
+
 // DefaultLambdaMissing is the per-gap penalty applied to the margin.
 const DefaultLambdaMissing = 6.0
 

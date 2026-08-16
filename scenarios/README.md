@@ -62,23 +62,49 @@ Confidence can only be calibrated against predictions that were wrong.
 
 The hard set supplies those. It reports, it calibrates, and it never breaks CI.
 
-## Current suite (20)
+It took until the suite was 71% accurate for a calibrated temperature to be
+adoptable at all. At 89% — the number before the live coverage-gap scenarios
+landed — every fit was refused, correctly: a default temperature is hard to beat
+out-of-sample when there is almost nothing for it to get wrong.
 
-**From a live cluster (1).** `live-oom-config-regression` — a real OOMKill on a
-real kind cluster, traced to the real commit that caused it. Recorded from an
-actual API server (29 observations, 14 events, a captured log snippet, two git
-commits) and sanitised for publication. Everything else below was written by
-hand.
+## Current suite (25)
 
-**Gated (17).** Including the live one, plus `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
-`imagepull`, `pending-unschedulable`, `bad-readiness-probe`,
-`liveness-probe-failure`, `node-pressure`, `pvc-unschedulable`,
-`service-selector-mismatch`, `hpa-at-max`, `config-regression`,
-`gitops-drift`, `dns-failure`, `dns-events-only` (secondary-signal lock),
-`healthy` (negative control — the engine must stay silent).
+**From a live cluster (6).** Recorded off real kind clusters against a real API
+server, real kubelet events and real container logs, then sanitised for
+publication. **Five of the six are misses**, and they are the most valuable
+records here.
 
-**Hard set (3, advisory).** `ambiguous-oom-or-node`, `ambiguous-stale-commit`,
-`ambiguous-probe-or-crash`.
+| Scenario | What it is | Engine says |
+|---|---|---|
+| `live-oom-config-regression` | OOMKill traced to the commit that caused it | ✅ correct, 97% |
+| `live-cpu-throttle-probe` | A 10m CPU limit starves the liveness probe; the kubelet kills a healthy process | ❌ `probe`, 91% — the symptom |
+| `live-upstream-dependency` | Frontend readiness fails because its backend never pulled its image | ❌ `probe`, 87% — blames the healthy workload |
+| `live-ephemeral-storage-evict` | Container writes past its emptyDir sizeLimit; kubelet evicts it | ❌ `config-regression`, 79% — no change identified |
+| `live-missing-secret-mount` | Pod mounts a Secret that was never created | ❌ `config-regression`, 79% |
+| `live-init-blocked` | Init container waits forever for a Service nobody deployed | ❌ `config-regression`, 79% |
+
+The bottom three are one bug seen from three unrelated incidents. The verdict
+survives deleting every recorded event, which means it does not rest on evidence
+about the failure — it rests on the deployment being present in the recording,
+which is true of every investigation ever run. Those three carry **no
+mutations**, deliberately: a mutation is a claim that a verdict depends on a
+specific fact, and this one depends on none.
+
+The middle two are coverage gaps rather than bugs: there is no CPU analyzer, and
+causation does not travel across a Service edge to whatever is behind it. Both
+are gaps made executable — when someone closes them, the scenarios start passing
+on their own.
+
+**Gated (17).** Including `live-oom-config-regression`, plus `oom-after-deploy`,
+`oom-memory-growth`, `crashloop`, `imagepull`, `pending-unschedulable`,
+`bad-readiness-probe`, `liveness-probe-failure`, `node-pressure`,
+`pvc-unschedulable`, `service-selector-mismatch`, `hpa-at-max`,
+`config-regression`, `gitops-drift`, `dns-failure`, `dns-events-only`
+(secondary-signal lock), `healthy` (negative control — the engine must stay
+silent).
+
+**Hard set (8, advisory).** The three ambiguous scenarios above, plus the five
+live misses.
 
 Six of the gated scenarios are discriminative: the correct verdict has to beat
 a plausible competitor. `config-regression` must beat plain memory,

@@ -142,17 +142,24 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 		p("| ECE @ default T=%.0f | %.1f%% |\n", score.DefaultTemperature, c.DefaultECE*100)
 		p("| ECE @ fitted T=%.1f | %.1f%% |\n", c.Temperature, c.ECE*100)
 		if l := suite.LOO; l != nil {
-			p("| LOO ECE (hardening) | %.1f%% |\n", l.LOOECE*100)
+			p("| out-of-sample NLL (fitted vs default) | %.4f vs %.4f |\n", l.LOONLL, l.DefaultNLL)
+			p("| out-of-sample Brier (fitted vs default) | %.4f vs %.4f |\n", l.LOOBrier, l.DefaultBrier)
+			p("| LOO ECE (reported, does not gate) | %.1f%% |\n", l.LOOECE*100)
+			p("| scan grid | [%.1f, %.1f] |\n", l.GridLow, l.GridHigh)
 			adopt := "no"
 			if l.Adopt {
 				adopt = "yes"
 			}
 			p("| recalibrated T adopted | %s |\n", adopt)
 			p("| operating T | %.1f |\n", score.CurrentTemperature)
+			p("\n> Adoption is decided on out-of-sample NLL **and** Brier, both of which must\n")
+			p("> beat the default by at least 2%%. ECE is reported because it is the\n")
+			p("> interpretable number — \"displayed confidence is off by this much\" — but it is\n")
+			p("> a binned statistic, and gating on it made the decision turn on which side of a\n")
+			p("> bucket edge a single scenario landed. See `score.adoptionRefusal`.\n")
 			if !l.Adopt {
 				p("\n> **Calibration refused:** %s\n>\n", l.RefusalReason)
-				p("> The engine keeps its default temperature T=%.0f. A fitted temperature is\n", score.DefaultTemperature)
-				p("> only adopted when the suite can actually support one — see `score.adoptionRefusal`.\n")
+				p("> The engine keeps its default temperature T=%.0f.\n", score.DefaultTemperature)
 			}
 		}
 		if c.DefaultECE > 0.10 {

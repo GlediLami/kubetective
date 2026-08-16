@@ -1,0 +1,25 @@
+name: live-missing-secret-mount
+description: >-
+  HARD SET, RECORDED LIVE. A deployment mounts a Secret that was never created.
+  The pod schedules fine, the node is fine, the image is fine — and the pod sits
+  in ContainerCreating indefinitely while the kubelet records FailedMount. One
+  `kubectl get secret` settles it; the answer is written in plain text in the
+  event the record already contains.
+
+  The engine reports "Configuration regression: a change preceded the incident"
+  at 79% on the same two contentless evidence lines as
+  [live-ephemeral-storage-evict]: workload changed, failure followed. The
+  FailedMount events are collected and then play no part in the verdict — the
+  evidence sweep shows removing every recorded event changes nothing.
+
+  Worth stating plainly: this is a false positive, not a near-miss. The engine
+  names a cause ("a change") that it has not identified, cannot point to, and
+  which is not what happened. No mutations, for the same reason as the
+  ephemeral-storage case — there is no evidence the verdict depends on.
+ground_truth:
+  root_cause: >-
+    The pod mounts a Secret that does not exist in the namespace, so the kubelet
+    cannot start the container and the pod never leaves ContainerCreating.
+  top_hypothesis_category: missing-secret
+  advisory: true
+  max_score: 0.60

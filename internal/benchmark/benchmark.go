@@ -300,7 +300,25 @@ type EngineFactory func(collectors ...collect.Collector) api.Investigator
 
 // RunSuite replays every scenario under scenariosDir and returns per-scenario
 // results in name order, plus the calibration report.
+//
+// The whole suite is graded at score.DefaultTemperature, never at whatever
+// temperature the engine is currently operating at. The benchmark is the
+// instrument that *produces* the calibrated temperature, so grading it at that
+// temperature closes a loop: adopting a fit rescales every displayed score, the
+// `min_score` thresholds in scenario.yaml no longer mean what they meant when
+// they were written, and the suite fails on its own success.
+//
+// That is not hypothetical. The first fit this suite ever adopted (T=54, after
+// five live hard-set scenarios dropped measured accuracy from 89% to 71%) broke
+// 14 of 25 scenarios on the very next run — every one of them for "score below
+// min_score", none of them because anything about the diagnosis had changed.
+// The bug was invisible for as long as it was, precisely because adoption had
+// never once succeeded.
+//
+// Ground truth is a property of the incident, not of the presentation layer.
 func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (*SuiteResult, error) {
+	defer score.PinTemperature(score.DefaultTemperature)()
+
 	entries, err := os.ReadDir(scenariosDir)
 	if err != nil {
 		return nil, err

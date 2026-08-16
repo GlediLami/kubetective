@@ -1,5 +1,11 @@
 # KubeTective
 
+[![ci](https://github.com/GlediLami/kubetective/actions/workflows/ci.yml/badge.svg)](https://github.com/GlediLami/kubetective/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/GlediLami/kubetective?sort=semver)](https://github.com/GlediLami/kubetective/releases/latest)
+[![go report card](https://goreportcard.com/badge/github.com/GlediLami/kubetective)](https://goreportcard.com/report/github.com/GlediLami/kubetective)
+[![go reference](https://pkg.go.dev/badge/github.com/GlediLami/kubetective.svg)](https://pkg.go.dev/github.com/GlediLami/kubetective)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 **Kubernetes told you the pod was OOMKilled. KubeTective tells you which commit did it.**
 
 An incident investigation engine that collects the facts, builds a timeline,
@@ -103,43 +109,53 @@ can gate CI. An LLM chat cannot.
 Four gates run on every commit. These are the real numbers, not aspirations:
 
 ```
-17/20 scenarios passed (3 hard-set scenarios are advisory: they calibrate, they do not gate)
-mutation gate: 15/15 causal claims held (verdict moves when its evidence is removed)
-noise gate:    20/20 verdicts held under 500 irrelevant observations
-calibration:   19 ground-truth points (2 incorrect), accuracy 89%
-  not adopted: out-of-sample ECE 18.6% does not beat the default 7.3%
+17/25 scenarios passed (8 hard-set scenarios are advisory: they calibrate, they do not gate)
+mutation gate: 17/17 causal claims held (verdict moves when its evidence is removed)
+noise gate:    25/25 verdicts held under 500 irrelevant observations
+calibration:   24 ground-truth points (7 incorrect), accuracy 71%
+  adopted: T=54, out-of-sample NLL 0.586 vs 0.652 and Brier 0.199 vs 0.220
 ```
 
-One of those twenty came off a live cluster rather than a text editor:
-[`live-oom-config-regression`](scenarios/live-oom-config-regression/) is a real
-OOMKill traced to the real commit that caused it, recorded from a real API
-server and sanitised for publication.
+**Accuracy is 71%, and it used to read 89%.** Nothing regressed. Six of those
+scenarios were recorded off a live cluster instead of written in an editor, and
+five of the six are cases the engine gets wrong — a CPU limit starving a
+liveness probe, a frontend blamed for its backend's image pull, an evicted pod,
+a missing Secret, a blocked init container. The 89% was measuring a suite built
+from problems the engine already knew how to solve.
 
 Three things worth saying plainly, because most benchmarks bury them:
 
-**Confidence is not currently calibrated, and the engine says so.** Expected
-calibration error is `|confidence − accuracy|`, so on a suite the engine never
-fails, the error-minimising answer is 100% every time — a fit against such a
-suite learns overconfidence, not calibration. Adoption is refused unless the
-suite contains real failures, the fit sits inside its search grid, and it beats
-the default out-of-sample. Today it refuses on the third. The number you see is
-an evidence-margin score at a hand-set temperature until the suite can support
-better.
+**Confidence is calibrated now, and the number that made it calibratable was a
+worse one.** Expected calibration error is `|confidence − accuracy|`, so on a
+suite the engine never fails, the error-minimising answer is 100% every time —
+a fit against such a suite learns overconfidence, not calibration. Adoption is
+refused unless the suite contains real failures, the fit sits inside its search
+grid, and it beats the default out-of-sample on two independent proper scoring
+rules. It stayed refused for as long as the suite was too easy to fail.
 
 **Passing is not the same as reasoning.** Each scenario declares what its
 verdict depends on; the mutation gate deletes that evidence and requires the
-verdict to move. An engine that keyed on "which analyzer fired" would pass all
-20 scenarios and fail this.
+verdict to move. An engine that keyed on "which analyzer fired" would pass every
+solvable scenario and fail this.
 
-**The suite is still mostly synthetic.** Nineteen of the twenty records are
-hand-authored miniatures, 4 to 25 observations, where a production namespace
-carries thousands. The noise gate closes part of that gap and the first live
-recording closes a little more, but this remains the project's weakest axis.
+**There is a known false positive, and it is in the suite as three failing
+cases.** On the eviction, the missing Secret, and the blocked init container the
+engine answers *"Configuration regression: a change preceded the incident"* at
+79% — with no commit, no diff, and no change named. Deleting every recorded
+event leaves the verdict untouched, which is the tell: it rests on the
+deployment existing, not on anything that happened.
+[`live-ephemeral-storage-evict`](scenarios/live-ephemeral-storage-evict/) and
+its two siblings carry no mutations for exactly that reason — there is no causal
+claim to make about a conclusion no fact supports.
 
 The most useful thing you can contribute is a real incident, and
 `kubetective scenario new <incident-id>` does the mechanical work: sanitises
 the recording, replays it, sweeps the evidence, and drafts the scenario for
 you to correct. See [scenarios/README.md](scenarios/README.md).
+
+A scenario the engine gets **wrong** is worth more than one it gets right. Five
+of the six live recordings are misses, and they are the reason confidence can
+be calibrated at all.
 
 ## What it finds
 

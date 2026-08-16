@@ -98,8 +98,16 @@ webhook_secret: &lt;shared-secret&gt;</code></pre>
       <p>Every score decomposes into the evidence lines that produced it, drawn from a
       documented six-band weight scale. A fitted temperature is adopted only when the
       benchmark can justify one: the suite must contain incorrect predictions, the fit must
-      sit inside its search grid, and it must beat the default out-of-sample. It currently
-      does not, so the engine runs at its hand-set default and says so in every report.</p>
+      sit inside its search grid, and it must beat the default out-of-sample on two
+      independent proper scoring rules (NLL and Brier) by a margin wider than noise.
+      Adoption stayed refused until the suite carried enough real failures to support one
+      &mdash; six live recordings later, at 71% measured accuracy, it does.</p>
+      <p>The decision deliberately does not run on expected calibration error. ECE is
+      binned, so on a suite whose confidences sit inside two buckets a single scenario can
+      swing the out-of-sample estimate by twenty points &mdash; and it did, flipping the
+      adopt/refuse verdict on every second scenario added. ECE is still reported, because
+      &ldquo;displayed confidence is off by this much&rdquo; is the number a human wants;
+      nothing hangs on it.</p>
       <p>Four gates run in CI — scenario, mutation (delete a verdict's evidence, the verdict
       must move), noise (bury it under 500 irrelevant observations, the verdict must hold),
       and false-positive. The evaluation report is a published, per-release artifact:

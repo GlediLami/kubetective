@@ -1,0 +1,31 @@
+name: live-ephemeral-storage-evict
+description: >-
+  HARD SET, RECORDED LIVE. A loader writes 200MB into an emptyDir declared with
+  a 16Mi sizeLimit. The kubelet evicts the pod, the ReplicaSet makes another,
+  that one is evicted too, and the record catches four pods in a row going the
+  same way. Not an OOM — the memory limit is never touched. Not a crash — the
+  process exits because it was evicted out from under itself.
+
+  The engine answers "Configuration regression: a change preceded the incident"
+  at 79%, and this is the scenario that shows why that answer is a problem. The
+  two evidence lines it offers are "workload observed changed in window" and
+  "mechanism: failure follows the change". No commit. No diff. No named change.
+  The evidence sweep finds the verdict collapses when `deployment.state` is
+  removed — so the "change" being blamed is the deployment object being present
+  in the recording at all, which is true of every investigation ever run.
+
+  This carries NO mutations, deliberately. A mutation asserts that a verdict
+  rests on a specific piece of evidence, and this verdict does not rest on
+  evidence about the failure: deleting all 24 recorded events, including every
+  eviction, leaves it unchanged at 79%. There is no causal claim to make about
+  a conclusion that no fact in the record supports.
+ground_truth:
+  root_cause: >-
+    The container writes past the 16Mi sizeLimit on its emptyDir volume and the
+    kubelet evicts the pod; each replacement repeats it.
+  top_hypothesis_category: storage-exhaustion
+  advisory: true
+  # An unfounded config-regression claim at 79% is worse than silence. Naming a
+  # cause the evidence does not support is the one failure mode a deterministic
+  # engine has no excuse for.
+  max_score: 0.60

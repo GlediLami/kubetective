@@ -1,0 +1,36 @@
+name: live-cpu-throttle-probe
+description: >-
+  HARD SET, RECORDED LIVE. A container is given a 10m CPU limit — one hundredth
+  of a core — and a liveness probe that has to finish inside one second. The
+  process is healthy and does nothing wrong; it simply never gets enough CPU to
+  answer in time, so the kubelet kills it, and keeps killing it.
+
+  The engine answers "probe failing" at 91%, and quotes the probe timeout as its
+  evidence. That is not wrong so much as it is the question restated: `kubectl
+  describe` prints the same line. The root cause is the CPU limit, and nothing
+  in the engine reads CPU — there is no throttling analyzer, no metric
+  collector wired in this recording, and no evidence in the record that a human
+  could use to reach the right answer either.
+
+  Kept as a coverage gap made executable. When someone adds CPU throttling
+  analysis, this scenario starts passing on its own.
+ground_truth:
+  root_cause: >-
+    The container's 10m CPU limit starves the liveness probe, which times out
+    and causes the kubelet to restart a process that was never unhealthy.
+  top_hypothesis_category: cpu-throttling
+  advisory: true
+  # Confidently wrong is worse than hedged wrong. An engine with no visibility
+  # into CPU should not report 91% on a workload whose failure it cannot see.
+  max_score: 0.80
+
+mutations:
+  - name: without-the-probe-events
+    reason: >-
+      The entire verdict rests on the Unhealthy events — they are the only
+      record that anything failed. Remove them and there is no probe failure
+      left to report, whatever a future analyzer makes of the rest. This claim
+      holds regardless of how the root cause is eventually attributed, which is
+      why it is safe to assert on a scenario the engine currently gets wrong.
+    remove_kinds: [event.recorded]
+    expect_category_not: probe

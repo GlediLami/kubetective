@@ -1,0 +1,38 @@
+name: live-upstream-dependency
+description: >-
+  HARD SET, RECORDED LIVE. Two workloads. The backend references an image in a
+  registry that does not resolve, so it never starts and its Service never gets
+  an endpoint. The frontend's readiness probe calls that Service, gets nothing,
+  and goes NotReady — twice over, on both replicas.
+
+  Investigating the frontend, every visible fact is a probe failure, and the
+  engine reports exactly that at 87%. The blameless workload gets named as the
+  problem while the workload that actually broke — a namespace-mate, one
+  Service hop away, sitting in ImagePullBackOff the whole time — is never
+  mentioned.
+
+  This is the failure mode that most justifies an evidence graph, and the
+  clearest thing the suite has to say about its limits: the engine builds a
+  graph of OWNS and RUNS_ON, but nothing crosses a Service to whatever is
+  behind it, so causation cannot travel the one edge that matters here.
+ground_truth:
+  root_cause: >-
+    The backend deployment cannot pull its image, so its Service has no
+    endpoints and the frontend's readiness probe fails against it. The frontend
+    itself is healthy.
+  top_hypothesis_category: upstream-dependency
+  advisory: true
+  # The engine reports the symptom of a healthy workload with high confidence.
+  # Hedging is the correct behaviour when the cause is outside what was
+  # collected.
+  max_score: 0.80
+
+mutations:
+  - name: without-the-probe-events
+    reason: >-
+      The readiness failures are the only evidence the frontend is in trouble
+      at all. Remove them and the frontend reads as healthy, which — given that
+      it genuinely is — must not leave a probe verdict standing. True whether
+      or not the engine ever learns to follow the Service edge.
+    remove_kinds: [event.recorded]
+    expect_category_not: probe
