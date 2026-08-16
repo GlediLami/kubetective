@@ -66,26 +66,37 @@ ISSUER="https://token.actions.githubusercontent.com"
 `checksums.txt` lists every artifact by digest.
 
 ```sh
-gh release download "$VERSION" --repo "$REPO" --pattern 'checksums.txt*'
+gh release download "$VERSION" --repo "$REPO" --pattern '*checksums.txt*'
+SUMS=$(ls *_checksums.txt)          # e.g. kubetective_1.0.1_checksums.txt
 
-cosign verify-blob checksums.txt \
-  --signature checksums.txt.sig \
-  --certificate checksums.txt.pem \
+cosign verify-blob "$SUMS" \
+  --signature "$SUMS.sig" \
+  --certificate "$SUMS.pem" \
   --certificate-identity-regexp "$IDENTITY" \
   --certificate-oidc-issuer "$ISSUER"
+```
+
+Expected output is `Verified OK`. The certificate binds the signature to the
+workflow that produced it:
+
+```
+Subject: https://github.com/GlediLami/kubetective/.github/workflows/release.yml@refs/tags/v1.0.1
+Issuer:  https://token.actions.githubusercontent.com
 ```
 
 **2. Check your download against the signed manifest.**
 
 ```sh
-gh release download "$VERSION" --repo "$REPO" --pattern '*Linux_x86_64.tar.gz'
-sha256sum --check --ignore-missing checksums.txt
+gh release download "$VERSION" --repo "$REPO" --pattern '*linux_amd64.tar.gz'
+sha256sum --check --ignore-missing "$SUMS"
 ```
 
 **3. Verify the container image** (signed by digest, so a retagged image fails):
 
+The image is tagged without the leading `v`:
+
 ```sh
-cosign verify "ghcr.io/gledilami/kubetective:${VERSION}" \
+cosign verify "ghcr.io/gledilami/kubetective:${VERSION#v}" \
   --certificate-identity-regexp "$IDENTITY" \
   --certificate-oidc-issuer "$ISSUER"
 ```

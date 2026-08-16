@@ -92,22 +92,27 @@ jobs:
           [ -n "$tag" ] || tag="${GITHUB_REF#refs/tags/}"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Download checksums, signature and certificate
+      - name: Download the signed checksum manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           tag='${{ steps.tag.outputs.tag }}'
+          # goreleaser prefixes assets with project and version
+          # (kubetective_1.0.1_checksums.txt), so match on the suffix and
+          # resolve the real filename rather than assuming it.
           gh release download "$tag" --repo '${{ github.repository }}' \
-            --pattern 'checksums.txt*' --dir .
-          ls -l checksums.txt*
+            --pattern '*checksums.txt*' --dir .
+          sums="$(ls *_checksums.txt)"
+          echo "sums=$sums" >> "$GITHUB_ENV"
+          ls -l -- *checksums.txt*
 
       - name: Verify the checksum manifest signature
         run: |
           set -euo pipefail
-          cosign verify-blob checksums.txt \
-            --signature checksums.txt.sig \
-            --certificate checksums.txt.pem \
+          cosign verify-blob "$sums" \
+            --signature "$sums.sig" \
+            --certificate "$sums.pem" \
             --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/' \
             --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
           echo "checksum manifest signature OK"
@@ -119,16 +124,19 @@ jobs:
           set -euo pipefail
           tag='${{ steps.tag.outputs.tag }}'
           gh release download "$tag" --repo '${{ github.repository }}' \
-            --pattern '*Linux_x86_64.tar.gz' --dir .
-          # Only check the lines for what we downloaded; --ignore-missing keeps
-          # sha256sum from failing on the rest of the manifest.
-          sha256sum --check --ignore-missing checksums.txt
+            --pattern '*linux_amd64.tar.gz' --dir .
+          # --ignore-missing so sha256sum checks only what we downloaded and
+          # not every line of the manifest.
+          sha256sum --check --ignore-missing "$sums"
           echo "artifact digest matches the signed manifest"
 
       - name: Verify the container image signature
         run: |
           set -euo pipefail
-          img="ghcr.io/${{ github.repository_owner }}/kubetective:${{ steps.tag.outputs.tag }}"
+          # goreleaser tags images with .Version (1.0.1), not the v-prefixed
+          # git tag, and ghcr requires a lowercase path.
+          version='${{ steps.tag.outputs.tag }}'; version="${version#v}"
+          img="ghcr.io/${{ github.repository_owner }}/kubetective:${version}"
           img="$(echo "$img" | tr '[:upper:]' '[:lower:]')"
           cosign verify "$img" \
             --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/' \
