@@ -11,7 +11,11 @@
 .idea/
 .vscode/
 
-# private design docs (not published)
-/docs/
+# private working docs - deliberately unpublished. docs/ itself is public
+# (README links into it), so the private files are named individually rather
+# than ignoring the whole directory.
+/docs/HANDOFF.md
+/docs/ROADMAP.md
+/docs/promotion-notes.md
+/docs/engineering-review.html
 /prompt.txt
-docs/promotion-notes.md

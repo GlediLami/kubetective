@@ -6,7 +6,90 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ## [Unreleased]
 
+### Added
+
+- **Mutation gate** — scenarios now declare what their verdict *depends on*
+  (`mutations:` in `scenario.yaml`). The gate deletes that evidence, replays,
+  and requires the verdict to move as declared. A pass-only suite cannot
+  distinguish an engine that reasons from one that keys on which analyzer
+  fired; 13 causal claims now check the difference.
+- **Noise gate** — every scenario is additionally replayed buried under 500
+  irrelevant observations from unrelated workloads, spread across the same
+  window. Recorded scenarios carry 4-25 observations; a production namespace
+  carries thousands, and nothing previously probed that gap.
+- **Hard set** — three genuinely under-determined scenarios
+  (`ambiguous-oom-or-node`, `ambiguous-stale-commit`,
+  `ambiguous-probe-or-crash`) marked `advisory: true`: they report and feed
+  calibration but never break CI. New ground-truth fields `max_score` and
+  `expect_competing` assert hedging rather than correctness.
+- **`kubetective sanitize`** — redacts a recorded incident for sharing.
+  Identifiers become sequential pseudonyms that preserve their relationships
+  (a deployment stays recognisably the parent of its pods, so change
+  attribution still works); free text is scrubbed for emails, IPs, URLs,
+  tokens, and keys; well-known Kubernetes names pass through. Verdict-
+  preserving, with a gate asserting every scenario replays to an identical
+  category and confidence after redaction.
+- Contradicting evidence extended from 2 analyzers to 7 (`probe`, `dns`,
+  `scheduling`, `service`, `configregression` join `oom` and `crashloop`),
+  each with a test proving the contradiction fires and lowers the score.
+- `internal/score/scale.go` documents the six-band weight scale; all 30-odd
+  analyzer weights now reference a named band instead of a bare float.
+- `StatusLabel()` / `Precedence()` on the `Analyzer` interface: the incident
+  status card is derived from the registry, so adding an analyzer no longer
+  means editing a rank map and a switch statement in the engine.
+- **OpenAPI 3.1 spec** at `docs/openapi.yaml` — 7 paths, 24 schemas, every
+  response type of the REST server described. Renders in Swagger UI or Redoc.
+
+### Changed
+
+- **README cut from 530 lines to 186.** It was a manual, not an introduction:
+  the full command table, the config-file reference, the environment-variable
+  table, alert-payload parsing rules, the REST endpoint table, the MCP tool
+  list, and the architecture walkthrough all sat above the fold. Those moved to
+  `docs/` (`cli.md`, `configuration.md`, `alerts.md`, `api.md`,
+  `architecture.md`, `comparison.md`) and the README now leads with what the
+  tool answers that `kubectl` does not.
+- The docs site repeated the old "every hypothesis carries a calibrated
+  confidence" claim; corrected to describe the adoption gate and the four CI
+  gates.
+
 ### Fixed
+
+- **Confidence calibration was degenerate and self-persisting.** Expected
+  calibration error is `|confidence - accuracy|`, so on a suite the engine
+  never fails the error-minimising policy is to answer 100% every time. The
+  fit consequently ran to `T=5.0` — the floor of its own search grid — which
+  saturates the sigmoid, and the result was written to
+  `~/.kubetective/config.json` and loaded by every subsequent invocation. The
+  `Dampen` safety net could not fire, because the degenerate fit reported
+  ECE 0.0%. Adoption is now refused unless the suite contains incorrect
+  predictions, the fit sits strictly inside the search grid, and it beats the
+  default out-of-sample; the refusal and its reason are printed. Displayed
+  confidences dropped from a uniform 100% to a realistic 89-98%.
+- **A failing calibration run could still mutate engine config.** `benchmark`
+  adopted and persisted the fitted temperature *before* the gate check, so a
+  red suite rewrote the operating temperature anyway - contradicting the
+  comment directly below it. Adoption now happens once, after the gate, in
+  `adoptCalibration`.
+- **Git evidence expired 48 hours after the incident.** The collector cut off
+  at `time.Now()-48h` rather than the investigation window, so any incident
+  older than two days silently lost its git attribution - including replayed
+  ones, breaking the reproducibility guarantee. The cutoff is now anchored to
+  `Window.Start`, with the clock used only when no window is supplied, and
+  commits landing after the window closes are skipped.
+- `TestGitCollectorFindsMatchingCommits` had been failing on `main` since
+  2026-08-10: it built commits at fixed dates and asserted against the
+  relative cutoff above. Same root cause; the test was right and the code was
+  wrong. It now runs against an injected clock.
+- The incident header card rendered with four mismatched widths against a
+  50-character border, putting a stray `%` outside the box in the README's
+  own example output. One constant, one row renderer.
+- Hypothesis IDs now have a stated `<prefix>.<resource>` contract
+  (`hypothesis.ValidID` / `SplitID`) with a conformance test running every
+  analyzer's real output across the suite. The outranking rule silently
+  depended on the format with nothing checking it.
+
+### Fixed (earlier)
 
 - The version-consistency gate no longer fails spuriously during the
   release window: a CI run that starts between a version-bump commit and

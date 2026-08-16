@@ -1,0 +1,511 @@
+openapi: 3.1.0
+
+info:
+  title: KubeTective REST API
+  version: 1.0.0
+  summary: Deterministic Kubernetes incident investigation over HTTP.
+  description: |
+    A thin adapter over the same in-process pipeline the CLI uses — there is
+    exactly one investigation engine, with one request/result shape
+    (`api.Investigator`).
+
+    Start the server with:
+
+    ```sh
+    kubetective serve --listen :8080
+    ```
+
+    **No authentication.** The server is designed to run inside a cluster
+    behind an ingress or service mesh that terminates auth, or on localhost.
+    Do not expose it directly to untrusted networks.
+
+    **Every investigation is recorded.** A successful `POST /v1/investigate`
+    appends a JSONL incident record and returns its id in `meta.record_id`.
+    That record replays deterministically through `kubetective replay`.
+
+    **Read-only.** There is no remediation endpoint. Applying an action stays
+    human-gated in the CLI behind an explicit `--yes`.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+  contact:
+    url: https://github.com/GlediLami/kubetective
+
+servers:
+  - url: http://localhost:8080
+    description: Local server
+
+tags:
+  - name: investigate
+    description: Run an investigation.
+  - name: incidents
+    description: Recorded incident records (the replay substrate).
+  - name: ops
+    description: Liveness and self-telemetry.
+
+paths:
+  /v1/investigate:
+    post:
+      tags: [investigate]
+      summary: Run an investigation
+      description: |
+        Collects, correlates, analyzes and scores, then returns the complete
+        result. The CLI renders a narrow slice of this; the API returns all of
+        it.
+
+        Request bodies are capped at 1 MiB.
+      operationId: investigate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvestigateRequest'
+            examples:
+              deployment:
+                summary: A deployment over the last 30 minutes
+                value:
+                  target: deployment/checkout
+                  namespace: prod
+                  since_minutes: 30
+              podNoLogs:
+                summary: A pod, skipping log collection
+                value:
+                  target: prod/pod/checkout-7f84c9
+                  logs: false
+      responses:
+        '200':
+          description: Investigation complete.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationResult'
+        '400':
+          description: Malformed JSON, or an unparseable `target`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { error: 'target "checkout": want kind/name or namespace/kind/name' }
+        '502':
+          description: The engine failed — typically no collectors reachable.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/incidents:
+    get:
+      tags: [incidents]
+      summary: List recorded incident ids
+      description: Newest first. Incident ids embed a unix timestamp.
+      operationId: listIncidents
+      responses:
+        '200':
+          description: Incident ids.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [incidents]
+                properties:
+                  incidents:
+                    type: array
+                    items: { type: string }
+              example:
+                incidents:
+                  - incident-1754575200-checkout
+                  - incident-1754571600-api
+        '404':
+          description: No incident store configured on this server.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /v1/incidents/{id}:
+    get:
+      tags: [incidents]
+      summary: Read a full incident record
+      operationId: getIncident
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+          example: incident-1754575200-checkout
+      responses:
+        '200':
+          description: The recorded incident.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Incident' }
+        '400':
+          description: Missing incident id.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Unknown incident, or no store configured.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /healthz:
+    get:
+      tags: [ops]
+      summary: Liveness
+      operationId: healthz
+      responses:
+        '200':
+          description: Server is up.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+
+  /metrics:
+    get:
+      tags: [ops]
+      summary: Self-telemetry
+      description: expvar counters (investigations, successes, errors).
+      operationId: metrics
+      responses:
+        '200':
+          description: Counters.
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+
+  /:
+    get:
+      tags: [ops]
+      summary: Read-only web UI (incident list)
+      operationId: ui
+      responses:
+        '200':
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+
+  /incidents/{id}:
+    get:
+      tags: [ops]
+      summary: Read-only web page for one incident
+      operationId: incidentUI
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: HTML page.
+          content:
+            text/html:
+              schema: { type: string }
+        '404':
+          description: Unknown incident.
+
+components:
+  schemas:
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    InvestigateRequest:
+      type: object
+      required: [target]
+      properties:
+        target:
+          type: string
+          description: |
+            `kind/name` or `namespace/kind/name`. A `namespace` field overrides
+            the two-part form.
+          examples: [deployment/checkout, prod/pod/checkout-7f84c9]
+        namespace:
+          type: string
+          description: Namespace for the `kind/name` form.
+        since_minutes:
+          type: integer
+          minimum: 0
+          description: Collection window, in minutes back from now. 0 uses the engine default (30m).
+        logs:
+          type: boolean
+          description: Tail container logs. Omit for the default (on).
+
+    ResourceRef:
+      type: object
+      required: [kind, name]
+      properties:
+        kind: { type: string, examples: [pod, deployment, node] }
+        namespace: { type: string }
+        name: { type: string }
+
+    SourceRef:
+      type: object
+      description: Points at the raw data behind an observation (auditability).
+      required: [system, query]
+      properties:
+        system: { type: string, examples: [k8s, prometheus, loki, git, argocd] }
+        query: { type: string, examples: ['GET /api/v1/namespaces/prod/pods/checkout-7f84c9'] }
+        raw_ref: { type: string }
+
+    Observation:
+      type: object
+      description: The normalized fact emitted by a collector.
+      required: [id, kind, source, timestamp, resource, payload, confidence, provenance]
+      properties:
+        id:
+          type: string
+          description: Content-hashed, stable for dedup.
+        kind:
+          type: string
+          examples: [pod.state, container.terminated, event.recorded, git.commit, metric.series]
+        source: { $ref: '#/components/schemas/SourceRef' }
+        timestamp: { type: string, format: date-time }
+        resource: { $ref: '#/components/schemas/ResourceRef' }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Parsed fields. Raw text never flows through unredacted.
+        confidence:
+          type: number
+          description: 1.0 for API state, lower for heuristics.
+        provenance: { type: string, description: Collector id and version. }
+
+    Evidence:
+      type: object
+      description: Ties an observation to a claim with an explicit weight and strength.
+      required: [id, observation, claim, weight, strength]
+      properties:
+        id: { type: string }
+        observation: { type: string, description: Observation.id }
+        claim: { type: string }
+        supports: { type: array, items: { type: string }, description: Hypothesis ids }
+        contradicts: { type: array, items: { type: string }, description: Hypothesis ids }
+        weight: { type: number, description: 'From the six-band scale; see internal/score/scale.go' }
+        strength: { type: number, minimum: -1, maximum: 1 }
+        raw_link: { type: string }
+
+    ScoreLine:
+      type: object
+      description: One visible contribution to a score.
+      required: [label, delta]
+      properties:
+        label: { type: string, examples: ['commit 6 min before onset'] }
+        delta: { type: number, description: Signed contribution. Negative lines are contradicting evidence. }
+        evidence_id: { type: string }
+
+    ScoreBreakdown:
+      type: object
+      description: |
+        `score = sigmoid(margin / temperature)`. Every point of margin maps to a
+        visible line.
+      required: [margin, temperature, score, lines, gap_penalty, calibrated]
+      properties:
+        margin: { type: number }
+        temperature: { type: number }
+        score: { type: number, minimum: 0, maximum: 1 }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/ScoreLine' }
+        gap_penalty: { type: number, description: Subtracted for expected-but-missing evidence. }
+        calibrated:
+          type: boolean
+          description: |
+            Whether the operating temperature came from a validated fit. Adoption
+            is refused unless the benchmark contains incorrect predictions, the
+            fit sits inside the search grid, and it beats the default
+            out-of-sample.
+
+    Hypothesis:
+      type: object
+      required: [id, claim, category, status]
+      properties:
+        id:
+          type: string
+          description: '`<prefix>.<resource>` — the outranking rule splits on the first dot.'
+          examples: [memory.checkout-7f84c9]
+        claim: { type: string }
+        category: { $ref: '#/components/schemas/HypothesisCategory' }
+        status: { $ref: '#/components/schemas/HypothesisStatus' }
+        score: { $ref: '#/components/schemas/ScoreBreakdown' }
+        evidence: { type: array, items: { type: string } }
+        contradictions: { type: array, items: { type: string } }
+        missing: { type: array, items: { type: string }, description: Expected but absent evidence. }
+        ai_generated:
+          type: boolean
+          description: Always labeled, and never permitted to assert causality.
+
+    HypothesisCategory:
+      type: string
+      enum: [memory, scheduling, image, config-regression, crashloop, node, probe, service, pvc, dns, hpa]
+
+    HypothesisStatus:
+      type: string
+      description: |
+        `ruled-out` is deterministic: on the same resource, a hypothesis beaten
+        by ≥0.25 is ruled out. Near ties stay `candidate` — "multiple plausible
+        causes".
+      enum: [likely, candidate, ruled-out]
+
+    Severity:
+      type: string
+      enum: [INFO, WARNING, HIGH, CRITICAL]
+
+    Risk:
+      type: string
+      enum: [LOW, MEDIUM, HIGH]
+
+    Finding:
+      type: object
+      required: [id, analyzer, severity, title, description, timestamp]
+      properties:
+        id: { type: string }
+        analyzer: { type: string, examples: [oom, crashloop, configregression] }
+        severity: { $ref: '#/components/schemas/Severity' }
+        title: { type: string }
+        description: { type: string }
+        evidence: { type: array, items: { type: string } }
+        timestamp: { type: string, format: date-time }
+
+    TimelineEvent:
+      type: object
+      required: [observation, offset]
+      properties:
+        observation: { $ref: '#/components/schemas/Observation' }
+        offset:
+          type: integer
+          format: int64
+          description: Nanoseconds relative to incident onset, so replays read identically across timezones.
+
+    Edge:
+      type: object
+      properties:
+        from: { $ref: '#/components/schemas/ResourceRef' }
+        to: { $ref: '#/components/schemas/ResourceRef' }
+        kind:
+          type: string
+          description: '`CAUSED_BY` is reserved for analyzers passing the causality discipline; the LLM can never emit it.'
+          examples: [OWNS, RUNS_ON, SELECTS, CAUSED_BY]
+
+    Graph:
+      type: object
+      required: [nodes, edges, bounds]
+      properties:
+        nodes: { type: array, items: { $ref: '#/components/schemas/ResourceRef' } }
+        edges: { type: array, items: { $ref: '#/components/schemas/Edge' } }
+        bounds:
+          type: object
+          description: Expansion budgets, so truncation is visible rather than silent.
+          properties:
+            node_budget: { type: integer }
+            edge_budget: { type: integer }
+            truncated: { type: boolean }
+            truncated_kind: { type: string }
+
+    Change:
+      type: object
+      description: One entry in the "what changed?" ranking.
+      required: [resource, description, timestamp, relevance]
+      properties:
+        resource: { $ref: '#/components/schemas/ResourceRef' }
+        description: { type: string }
+        timestamp: { type: string, format: date-time }
+        relevance: { type: number, minimum: 0, maximum: 1 }
+        factors: { type: object, additionalProperties: { type: number } }
+
+    EvidenceGap:
+      type: object
+      description: |
+        Expected-but-missing evidence — a collector was down, a permission was
+        missing, telemetry is not configured. Gaps cap confidence and are always
+        surfaced, never silent.
+      required: [description, category]
+      properties:
+        description: { type: string }
+        category: { type: string, examples: [permission, collector-down, no-metrics, analyzer-error] }
+        expected: { type: string }
+
+    Recommendation:
+      type: object
+      description: Drawn from a typed rule table. The LLM may paraphrase, never invent.
+      required: [id, action, risk, reason]
+      properties:
+        id: { type: string }
+        action: { type: string, examples: ['rollback deployment/checkout'] }
+        risk: { $ref: '#/components/schemas/Risk' }
+        reason: { type: string }
+        evidence: { type: array, items: { type: string } }
+
+    IncidentSummary:
+      type: object
+      required: [id, target, status, severity, confidence]
+      properties:
+        id: { type: string }
+        target: { $ref: '#/components/schemas/ResourceRef' }
+        status: { type: string, examples: [OOMKILLED, CRASHLOOPBACKOFF, PENDING, INVESTIGATED] }
+        severity: { $ref: '#/components/schemas/Severity' }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        onset: { type: string, format: date-time }
+
+    ResultMeta:
+      type: object
+      required: [engine_version, started, duration]
+      properties:
+        engine_version: { type: string }
+        started: { type: string, format: date-time }
+        duration: { type: integer, format: int64, description: Nanoseconds. }
+        sources_hit: { type: array, items: { type: string } }
+        record_id: { type: string, description: 'Incident record id — replay it with `kubetective replay <id>`.' }
+        truncated: { type: boolean }
+
+    InvestigationResult:
+      type: object
+      required: [meta]
+      properties:
+        incident: { $ref: '#/components/schemas/IncidentSummary' }
+        observations: { type: array, items: { $ref: '#/components/schemas/Observation' } }
+        evidence: { type: array, items: { $ref: '#/components/schemas/Evidence' } }
+        timeline: { type: array, items: { $ref: '#/components/schemas/TimelineEvent' } }
+        graph: { $ref: '#/components/schemas/Graph' }
+        changes: { type: array, items: { $ref: '#/components/schemas/Change' } }
+        hypotheses:
+          type: array
+          description: Ranked by score, descending.
+          items: { $ref: '#/components/schemas/Hypothesis' }
+        findings: { type: array, items: { $ref: '#/components/schemas/Finding' } }
+        recommendations: { type: array, items: { $ref: '#/components/schemas/Recommendation' } }
+        evidence_gaps: { type: array, items: { $ref: '#/components/schemas/EvidenceGap' } }
+        meta: { $ref: '#/components/schemas/ResultMeta' }
+
+    Incident:
+      type: object
+      description: A recorded investigation — the replay and benchmark substrate.
+      required: [id, meta, observations]
+      properties:
+        id: { type: string }
+        meta:
+          type: object
+          required: [engine_version, record_version]
+          properties:
+            cluster_id: { type: string }
+            k8s_version: { type: string }
+            engine_version: { type: string }
+            record_version:
+              type: integer
+              description: A record written by a newer engine is refused, never read speculatively.
+            target: { type: string }
+        observations: { type: array, items: { $ref: '#/components/schemas/Observation' } }
+        result:
+          type: object
+          description: The derived view at record time. Replay regenerates it.
+          properties:
+            hypotheses: { type: array, items: { $ref: '#/components/schemas/Hypothesis' } }
+            findings: { type: array, items: { $ref: '#/components/schemas/Finding' } }
+            changes: { type: array, items: { $ref: '#/components/schemas/Change' } }
+            gaps: { type: array, items: { $ref: '#/components/schemas/EvidenceGap' } }

@@ -94,12 +94,16 @@ webhook_secret: &lt;shared-secret&gt;</code></pre>
 
     <section id="scoring">
       <h2>Scoring &amp; calibration</h2>
-      <p>Every hypothesis carries a calibrated confidence: scores are validated with
-      leave-one-out cross-validation on a scenario suite, dampened when calibration is off,
-      and always decomposable into the evidence lines that produced them. The evaluation
-      report is a published, per-release artifact:
+      <p>Every score decomposes into the evidence lines that produced it, drawn from a
+      documented six-band weight scale. A fitted temperature is adopted only when the
+      benchmark can justify one: the suite must contain incorrect predictions, the fit must
+      sit inside its search grid, and it must beat the default out-of-sample. It currently
+      does not, so the engine runs at its hand-set default and says so in every report.</p>
+      <p>Four gates run in CI — scenario, mutation (delete a verdict's evidence, the verdict
+      must move), noise (bury it under 500 irrelevant observations, the verdict must hold),
+      and false-positive. The evaluation report is a published, per-release artifact:
       <a href="https://github.com/GlediLami/kubetective/blob/main/reports/evaluation/latest.md">
-      reports/evaluation/latest.md</a> — it gates every change in CI.</p>
+      reports/evaluation/latest.md</a>.</p>
     </section>
 
     <section id="ops">
