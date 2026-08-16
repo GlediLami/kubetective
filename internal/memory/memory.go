@@ -10,7 +10,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/GlediLami/kubetective/internal/model"
 	"github.com/GlediLami/kubetective/internal/record"
@@ -77,6 +79,12 @@ func jaccard(a, b []string) float64 {
 	return float64(intersect) / float64(len(union))
 }
 
+// normalizeID reduces any accepted incident reference - bare id, filename, or
+// full path - to the bare id Store.List yields.
+func normalizeID(id string) string {
+	return strings.TrimSuffix(filepath.Base(id), ".jsonl")
+}
+
 // Similar ranks past incidents by kind-set overlap with the given incident,
 // newest first within equal overlap. topN ≤ 0 means all. When clusterID is
 // non-empty, only incidents from that cluster are considered (multi-cluster
@@ -87,6 +95,15 @@ func Similar(store *record.Store, incidentID string, topN int, clusterID string)
 		return nil, fmt.Errorf("load incident %q: %w", incidentID, err)
 	}
 	targetKinds := kindsOf(target)
+
+	// Normalise before comparing. Store.Load accepts a bare id, a filename, or
+	// a path; Store.List only ever returns bare ids. Comparing the caller's
+	// form directly meant an id passed as "incident-123.jsonl" never matched
+	// "incident-123" in the exclusion below, so the incident under
+	// investigation was returned as its own 100%-overlap prior match - on
+	// every live investigation, because that is the one caller that passes a
+	// filename.
+	incidentID = normalizeID(incidentID)
 
 	ids, err := store.List()
 	if err != nil {
