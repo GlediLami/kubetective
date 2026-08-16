@@ -131,9 +131,10 @@ where a production namespace carries thousands. The noise gate closes part of
 that gap. It is a proxy, not the real thing, and this is the project's weakest
 axis.
 
-The most useful thing you can contribute is a real incident.
-`kubetective sanitize` redacts one for sharing — pseudonymised identifiers,
-scrubbed free text, and a gate asserting the verdict survives unchanged.
+The most useful thing you can contribute is a real incident, and
+`kubetective scenario new <incident-id>` does the mechanical work: sanitises
+the recording, replays it, sweeps the evidence, and drafts the scenario for
+you to correct. See [scenarios/README.md](scenarios/README.md).
 
 ## What it finds
 
@@ -165,8 +166,9 @@ benchmark case.
 
 Good first issues:
 
-- **Add a scenario.** Record an incident, sanitize it, add ground truth — it
-  becomes both a demo and a permanent regression test.
+- **Add a scenario.** `kubetective scenario new <incident-id>` sanitises a
+  recording, replays it, and drafts the ground truth and mutations for you to
+  correct. It becomes both a demo and a permanent regression test.
 - **Harden an analyzer.** Find a false positive against the suite, fix the
   scoring, let `kubetective benchmark` prove it.
 - **Add an output format.** `json` and `markdown` exist; `sarif` and `slack` are open.

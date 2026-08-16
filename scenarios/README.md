@@ -82,15 +82,27 @@ beat crashloop, `gitops-drift` must beat crashloop.
 
 ## Contributing a scenario
 
-1. Record one: `kubetective investigate <target>` writes a JSONL record.
-2. **Sanitise it before sharing**: `kubetective sanitize <incident-id>`
-   pseudonymises namespaces, workloads, nodes and images, and scrubs emails,
-   IPs, URLs and tokens out of free text. Redaction is verdict-preserving —
-   there is a gate asserting every scenario replays identically after it — but
-   read the summary before you publish anything.
-3. Write `scenario.yaml` with the ground truth, and declare at least one
-   mutation stating what the verdict depends on.
-4. `kubetective benchmark` must stay green.
+```sh
+kubetective investigate deployment/checkout --since=30m   # 1. record it
+kubetective scenario new <incident-id> --name my-incident # 2. draft it
+$EDITOR scenarios/my-incident/scenario.yaml               # 3. correct it
+kubetective benchmark                                     # 4. prove it
+```
+
+Step 2 does the mechanical work. It sanitises the record (pseudonymised
+identifiers, scrubbed free text — verdict-preserving, with a gate asserting
+it), replays it to see what the engine concludes, then removes each
+observation kind in turn to find which evidence the verdict rests on. Kinds
+that change the verdict become proposed mutations.
+
+Step 3 is the part only you can do. **The draft carries the engine's own
+answer, which is not ground truth.** Committing it unedited produces a
+scenario that can only ever confirm what the engine already thinks. Decide
+what actually happened; if the engine got it wrong, keep the true answer and
+mark it `advisory: true`.
+
+A scenario the engine fails is worth more than one it passes — see the hard
+set above for why.
 
 If the incident is one where the honest answer is "it could be either", mark it
 `advisory: true` and say why in the description. Those are the most valuable

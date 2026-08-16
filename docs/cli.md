@@ -7,6 +7,7 @@ Run `kubetective <command> --help` for every flag.
 | `kubetective investigate <resource>` | Run an investigation (flags: `--since`, `--namespace`, `--no-logs`, `--format=json`, `--prometheus-url`, `--loki-url`, `--git-repo`, `--llm*`) |
 | `kubetective replay <incident-id>` | Re-run a recorded investigation through the current engine (deterministic) |
 | `kubetective sanitize <incident-id>` | Redact a record for sharing: pseudonymised identifiers, scrubbed free text, verdict preserved |
+| `kubetective scenario new <incident-id>` | Draft a benchmark scenario from a recording: sanitises it, replays it, sweeps the evidence, and proposes mutations (`--name`, `--dir`, `--force`) |
 | `kubetective incidents` | List recorded incident ids, newest first |
 | `kubetective incidents similar <id> [--cluster <id>]` | Find similar past incidents (incident memory, Jaccard overlap; `--cluster` scopes the lookup to one cluster) |
 | `kubetective alert <pagerduty\|grafana\|slack>` | Investigate from a webhook alert payload (stdin or `--file`; zero API keys) |

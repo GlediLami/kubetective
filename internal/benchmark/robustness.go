@@ -118,6 +118,83 @@ func RunMutation(ctx context.Context, m Mutation, obs []model.Observation, facto
 	return res, nil
 }
 
+// --- evidence sweep ------------------------------------------------------
+
+// SweepEntry is one observation kind's effect on the verdict: what the engine
+// concludes once every observation of that kind is removed.
+type SweepEntry struct {
+	Kind     string
+	Removed  int
+	Category string  // verdict without this kind ("-" when the engine falls silent)
+	Score    float64 // confidence without this kind
+	// LoadBearing is true when removing the kind changed the verdict category,
+	// Weakening when it only cost confidence.
+	LoadBearing bool
+	Weakening   bool
+}
+
+// SweepResult is the baseline verdict plus one entry per observation kind.
+type SweepResult struct {
+	BaselineCategory string
+	BaselineScore    float64
+	Entries          []SweepEntry
+}
+
+// Sweep removes each observation kind in turn and records what the verdict
+// becomes. It answers "which evidence is this conclusion actually resting on?"
+// — the same question the mutation gate asks, run exhaustively instead of
+// against declared claims, so a new scenario can propose its own.
+//
+// Deterministic: kinds are swept in sorted order.
+func Sweep(ctx context.Context, obs []model.Observation, factory EngineFactory) (*SweepResult, error) {
+	baseCat, baseScore, err := verdictOf(ctx, obs, factory)
+	if err != nil {
+		return nil, err
+	}
+	out := &SweepResult{BaselineCategory: baseCat, BaselineScore: baseScore}
+
+	seen := map[string]bool{}
+	var kinds []string
+	for _, o := range obs {
+		if !seen[o.Kind] {
+			seen[o.Kind] = true
+			kinds = append(kinds, o.Kind)
+		}
+	}
+	sort.Strings(kinds)
+
+	for _, k := range kinds {
+		mutated, removed := applyMutation(obs, Mutation{RemoveKinds: []string{k}})
+		cat, score, err := verdictOf(ctx, mutated, factory)
+		if err != nil {
+			return nil, err
+		}
+		out.Entries = append(out.Entries, SweepEntry{
+			Kind:        k,
+			Removed:     removed,
+			Category:    cat,
+			Score:       score,
+			LoadBearing: cat != baseCat,
+			Weakening:   cat == baseCat && score < baseScore-1e-9,
+		})
+	}
+	return out, nil
+}
+
+// verdictOf replays observations and reports the top hypothesis.
+func verdictOf(ctx context.Context, obs []model.Observation, factory EngineFactory) (string, float64, error) {
+	eng := factory(record.NewReplayCollector(obs))
+	out, err := eng.Investigate(ctx, &api.InvestigationRequest{Target: model.ResourceRef{Kind: "pod", Name: "scenario"}})
+	if err != nil {
+		return "", 0, err
+	}
+	top := topHypothesis(out)
+	if top == nil {
+		return "-", 0, nil
+	}
+	return string(top.Category), top.Score.Score, nil
+}
+
 // --- noise ---------------------------------------------------------------
 
 // benignKinds are observation kinds that carry no failure signal. Noise is

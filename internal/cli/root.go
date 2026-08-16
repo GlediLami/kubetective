@@ -140,6 +140,7 @@ Install as a kubectl plugin (binary named kubectl-investigate) and run:
 	root.AddCommand(newActionCmd())
 	root.AddCommand(newAlertCmd())
 	root.AddCommand(newSanitizeCmd())
+	root.AddCommand(newScenarioCmd())
 	root.PersistentFlags().StringVar(&logFormat, "log-format", "", "structured logging: json | text (off unless set; KUBETECTIVE_LOG_FORMAT)")
 	root.PersistentFlags().StringVar(&logLevel, "log-level", "info", "log level: debug | info | warn (KUBETECTIVE_LOG_LEVEL)")
 	return root

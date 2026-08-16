@@ -37,6 +37,20 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 - `StatusLabel()` / `Precedence()` on the `Analyzer` interface: the incident
   status card is derived from the registry, so adding an analyzer no longer
   means editing a rank map and a switch statement in the engine.
+- **`kubetective scenario new`** — drafts a benchmark scenario from a recorded
+  incident (closes #13). Sanitises the record, replays it to capture the
+  observed verdict, then removes each observation kind in turn to find which
+  evidence the verdict rests on; load-bearing kinds become proposed mutations.
+  Round-tripping `dns-failure` through it reproduces both mutations that
+  scenario declares by hand, which is the test that guards the sweep.
+
+  The draft is marked unfinished by construction. It carries the engine's own
+  answer, and a contributor who commits that unedited has added a scenario that
+  can only ever confirm the engine's current opinion — so the file leads with
+  that warning, every ground-truth field is a TODO, and the command prints what
+  to check. Sanitisation is the default; opting out is loud.
+- `benchmark.Sweep` — the evidence sweep as a reusable primitive, asking the
+  mutation gate's question exhaustively rather than against declared claims.
 - **OpenAPI 3.1 spec** at `docs/openapi.yaml` — 7 paths, 24 schemas, every
   response type of the REST server described. Renders in Swagger UI or Redoc.
 
