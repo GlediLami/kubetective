@@ -1,0 +1,133 @@
+# Publish a release from a tag: binaries, packages, container image, SBOMs,
+# and keyless cosign signatures.
+#
+# Keyless is the point. The job's GitHub OIDC token is exchanged with Fulcio
+# for a short-lived signing certificate and the signature is recorded in the
+# Rekor transparency log, so there is no private key to store, rotate, or leak
+# — and anyone can verify a release against this workflow's identity without
+# holding a public key we handed them.
+#
+# The verify job re-checks the published artifacts from scratch, the same way a
+# stranger would. A release that cannot be verified fails the run.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)verify — runs the verify job only"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  goreleaser:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      packages: write # push to ghcr
+      id-token: write # keyless signing: mint the OIDC token for Fulcio
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # goreleaser needs full history for the changelog
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      # The gates run again here. A tag is not a promise that main was green
+      # when it was cut.
+      - name: Test
+        run: go test ./...
+
+      - name: Benchmark gate
+        run: go run ./cmd/kubetective benchmark
+
+      - name: Version consistency
+        run: ./hack/check-version.sh
+
+      - uses: sigstore/cosign-installer@v3
+      - uses: anchore/sbom-action/download-syft@v0
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Verify the published release as an outsider would: nothing from the build
+  # job is reused, everything is fetched from the release and checked against
+  # the workflow identity that signed it.
+  verify:
+    needs: [goreleaser]
+    if: always() && (needs.goreleaser.result == 'success' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: sigstore/cosign-installer@v3
+
+      - name: Resolve the tag under test
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.tag }}"
+          [ -n "$tag" ] || tag="${GITHUB_REF#refs/tags/}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download checksums, signature and certificate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag='${{ steps.tag.outputs.tag }}'
+          gh release download "$tag" --repo '${{ github.repository }}' \
+            --pattern 'checksums.txt*' --dir .
+          ls -l checksums.txt*
+
+      - name: Verify the checksum manifest signature
+        run: |
+          set -euo pipefail
+          cosign verify-blob checksums.txt \
+            --signature checksums.txt.sig \
+            --certificate checksums.txt.pem \
+            --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+          echo "checksum manifest signature OK"
+
+      - name: Verify an artifact against the signed manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag='${{ steps.tag.outputs.tag }}'
+          gh release download "$tag" --repo '${{ github.repository }}' \
+            --pattern '*Linux_x86_64.tar.gz' --dir .
+          # Only check the lines for what we downloaded; --ignore-missing keeps
+          # sha256sum from failing on the rest of the manifest.
+          sha256sum --check --ignore-missing checksums.txt
+          echo "artifact digest matches the signed manifest"
+
+      - name: Verify the container image signature
+        run: |
+          set -euo pipefail
+          img="ghcr.io/${{ github.repository_owner }}/kubetective:${{ steps.tag.outputs.tag }}"
+          img="$(echo "$img" | tr '[:upper:]' '[:lower:]')"
+          cosign verify "$img" \
+            --certificate-identity-regexp '^https://github\.com/${{ github.repository }}/\.github/workflows/release\.yml@refs/tags/' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            > /dev/null
+          echo "container image signature OK: $img"

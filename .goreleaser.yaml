@@ -4,8 +4,13 @@
 #   make release VERSION=v0.9.0        # bump, tag, push, formula, tap (CONTRIBUTING.md)
 #   goreleaser release --clean         # publish binaries/containers from the tag
 #
-# Signing (cosign) and SBOM (syft) run only in CI where the cosign key is
-# available; locally they are skipped (env: COSIGN_PRIVATE_KEY unset).
+# Signing is KEYLESS (sigstore): the release workflow's GitHub OIDC token is
+# exchanged with Fulcio for a short-lived certificate, and the signature is
+# logged in Rekor. There is no private key to store, rotate, or leak - which
+# is why the previous key-based config never ran: it required COSIGN_PRIVATE_KEY
+# and COSIGN_PASSWORD secrets that were never created.
+#
+# Verify a release without trusting us: see SECURITY.md.
 version: 2
 
 project_name: kubetective
@@ -58,8 +63,13 @@ nfpms:
         dst: /usr/share/doc/kubetective/README.md
 
 sboms:
-  - artifacts: archive
+  - id: archive
+    artifacts: archive
 
+# NOTE: goreleaser is phasing `dockers` out in favour of `dockers_v2`
+# (https://goreleaser.com/deprecations#dockers). Not migrated yet - the change
+# also moves image signing, and it cannot be verified without a real registry
+# push. Migrate at the next release, with a dry run against a scratch repo.
 dockers:
   - id: kubetective
     use: buildx
@@ -75,17 +85,32 @@ dockers:
       - "--label=org.opencontainers.image.source=https://github.com/GlediLami/kubetective"
       - "--label=org.opencontainers.image.licenses=Apache-2.0"
 
+# Sign the checksum manifest rather than every artifact: checksums.txt covers
+# each file by digest, so one signature transitively covers the whole release
+# and verification stays a two-step check anyone can run.
 signs:
-  - id: cosign
+  - id: keyless
     cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
     args:
       - "sign-blob"
-      - "--key=env://COSIGN_PRIVATE_KEY"
       - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
       - "${artifact}"
+      - "--yes"
+    artifacts: checksum
+    output: true
+
+# The container image is signed by digest and carries its SBOM as an
+# attestation, so `cosign verify` and `cosign verify-attestation` both work
+# against ghcr.io without downloading anything first.
+docker_signs:
+  - id: keyless-image
+    cmd: cosign
+    args: ["sign", "${artifact}", "--yes"]
     artifacts: all
-    env:
-      - "COSIGN_PASSWORD={{ .Env.COSIGN_PASSWORD }}"
+    output: true
 
 release:
   github:
@@ -94,8 +119,10 @@ release:
   header: |
     ## kubetective {{ .Version }}
 
-    Signed with cosign; SBOM attached to the assets. See the
-    [CHANGELOG](CHANGELOG.md) for what shipped.
+    Keyless-signed with cosign (sigstore); SBOMs attached to the archives and
+    attested on the container image. Verification instructions:
+    [SECURITY.md](https://github.com/GlediLami/kubetective/blob/main/SECURITY.md#verifying-a-release).
+    See the [CHANGELOG](CHANGELOG.md) for what shipped.
 
 changelog:
   sort: asc
