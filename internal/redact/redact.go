@@ -392,17 +392,43 @@ func (r *Redactor) payload(p map[string]any) map[string]any {
 		case map[string]any:
 			out[k] = r.payload(val)
 		case []any:
+			// Lists carry nested objects in real payloads - a deployment's
+			// conditions[] each hold a free-text message naming the replicaset.
+			// Passing non-string items through verbatim leaked those.
 			list := make([]any, 0, len(val))
 			for _, item := range val {
-				if s, ok := item.(string); ok {
-					list = append(list, r.payloadString(k, s))
-					continue
+				switch it := item.(type) {
+				case string:
+					list = append(list, r.payloadString(k, it))
+				case map[string]any:
+					list = append(list, r.payload(it))
+				case []any:
+					list = append(list, r.payloadList(k, it))
+				default:
+					list = append(list, item)
 				}
-				list = append(list, item)
 			}
 			out[k] = list
 		default:
 			out[k] = v
+		}
+	}
+	return out
+}
+
+// payloadList rewrites a nested list, mirroring the cases in payload.
+func (r *Redactor) payloadList(key string, in []any) []any {
+	out := make([]any, 0, len(in))
+	for _, item := range in {
+		switch it := item.(type) {
+		case string:
+			out = append(out, r.payloadString(key, it))
+		case map[string]any:
+			out = append(out, r.payload(it))
+		case []any:
+			out = append(out, r.payloadList(key, it))
+		default:
+			out = append(out, item)
 		}
 	}
 	return out
@@ -486,7 +512,7 @@ func (r *Redactor) text(s string) string {
 func (r *Redactor) replaceKnownNames(s string) string {
 	type pair struct{ from, to string }
 	var pairs []pair
-	for _, a := range []*aliaser{r.workloads, r.nodes, r.namespaces, r.containers} {
+	for _, a := range []*aliaser{r.workloads, r.nodes, r.namespaces, r.containers, r.images} {
 		for from, to := range a.seen {
 			if len(from) < 3 {
 				continue // too short to match safely
