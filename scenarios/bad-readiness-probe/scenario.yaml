@@ -10,3 +10,10 @@ ground_truth:
   expected_finding_analyzers:
     - probe
   expected_status: UNHEALTHY
+mutations:
+  - name: without-probe-events
+    reason: >-
+      A running container with a healthy node looks entirely normal once the
+      Unhealthy events are gone. The engine must not manufacture a verdict.
+    remove_kinds: [event.recorded]
+    expect_no_findings: true

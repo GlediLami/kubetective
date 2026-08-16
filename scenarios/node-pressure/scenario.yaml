@@ -11,3 +11,10 @@ ground_truth:
     - nodepressure
     - oom
   expected_status: NODEPRESSURE
+mutations:
+  - name: without-node-conditions
+    reason: >-
+      Node pressure outranks the per-pod memory hypothesis only because the node
+      conditions are present. Remove them and the OOMKill is just an OOMKill.
+    remove_kinds: [node.condition]
+    expect_category: memory

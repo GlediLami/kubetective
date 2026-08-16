@@ -10,3 +10,17 @@ ground_truth:
   expected_finding_analyzers:
     - oom
   expected_status: OOMKILLED
+mutations:
+  - name: without-metrics
+    reason: >-
+      Prometheus series corroborate the mechanism (breach + growth). Losing them
+      must cost confidence — the conclusion survives on container evidence, but
+      it is no longer metric-confirmed.
+    remove_kinds: [metric.series]
+    max_score: 0.96
+  - name: without-terminations
+    reason: >-
+      The OOMKilled terminations are the mechanism itself. Without them there is
+      no evidence any container ever died, and the engine must fall silent.
+    remove_kinds: [container.terminated]
+    expect_no_findings: true

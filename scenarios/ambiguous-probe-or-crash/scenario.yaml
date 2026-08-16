@@ -1,0 +1,15 @@
+name: ambiguous-probe-or-crash
+description: >-
+  HARD SET. The web container restarts six times. Probes report 503 and the
+  container exits 1 — and those are the same fact seen from two angles: an app
+  failing its health endpoint will both fail probes and exit. Nothing in the
+  record establishes which came first. Ground truth is the application crash
+  (the process exits on its own; a probe-induced kill would show exit 137, not
+  1), but the distinction is fine enough that a hedged answer is the honest
+  one.
+ground_truth:
+  root_cause: "Application crash loop (exit 1); probe failures are the symptom, not the cause"
+  top_hypothesis_category: crashloop
+  advisory: true
+  max_score: 0.95
+  expect_competing: true

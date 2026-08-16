@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 
 	"github.com/GlediLami/kubetective/internal/benchmark"
 	"github.com/GlediLami/kubetective/internal/collect"
-	"github.com/GlediLami/kubetective/internal/config"
 	"github.com/GlediLami/kubetective/internal/engine"
 	"github.com/GlediLami/kubetective/internal/score"
 	"github.com/GlediLami/kubetective/pkg/api"
@@ -42,13 +42,9 @@ Exit code 1 on any failure - CI gate.`,
 				return err
 			}
 			// Calibration hardening: adopt a leave-one-out-validated
-			// temperature, persisted for every future
-			// invocation (server/MCP/CLI all load it at startup).
-			if c := suite.Calibration; c != nil && suite.LOO != nil && suite.LOO.Adopt && c.Points >= 10 {
-				if serr := config.Save(config.Config{Temperature: suite.LOO.Temperature}); serr == nil {
-					score.SetTemperature(suite.LOO.Temperature)
-				}
-			}
+			// temperature, persisted for every future invocation (server/MCP/CLI
+			// all load it at startup). adoptCalibration owns the whole rule.
+			adoptCalibration(io.Discard, suite)
 			report := evaluateMarkdown(suite)
 			if outFile != "" {
 				if werr := os.WriteFile(outFile, []byte(report), 0o644); werr != nil {
@@ -59,8 +55,8 @@ Exit code 1 on any failure - CI gate.`,
 				fmt.Print(report)
 			}
 			failures := 0
-			for _, r := range suite.Results {
-				if !r.Passed {
+			for i := range suite.Results {
+				if suite.Results[i].GateFailed() {
 					failures++
 				}
 			}
@@ -69,6 +65,14 @@ Exit code 1 on any failure - CI gate.`,
 			}
 			if n := suite.UnsafeActionCount(); n > 0 {
 				return fmt.Errorf("evaluation gate: %d unsafe action(s) planned on healthy scenarios (must be 0)", n)
+			}
+			if rb := suite.Robustness; rb != nil {
+				if p, total := rb.MutationTotals(); p != total {
+					return fmt.Errorf("mutation gate: %d/%d causal claims failed — a verdict survived the loss of its own evidence", total-p, total)
+				}
+				if s, total := rb.NoiseTotals(); s != total {
+					return fmt.Errorf("noise gate: %d/%d verdicts changed under %d irrelevant observations", total-s, total, rb.NoiseN)
+				}
 			}
 			return nil
 		},
@@ -95,10 +99,13 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 	passed, total := 0, len(suite.Results)
 	for _, r := range suite.Results {
 		status := "PASS"
-		if !r.Passed {
-			status = "FAIL"
-		} else {
+		switch {
+		case r.Passed:
 			passed++
+		case r.Advisory:
+			status = "MISS (advisory)"
+		default:
+			status = "FAIL"
 		}
 		cat := r.ExpectedCategory
 		if cat == "" {
@@ -130,8 +137,9 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 	if c := suite.Calibration; c != nil {
 		p("| metric | value |\n|---|---:|\n")
 		p("| ground-truth points | %d |\n", c.Points)
+		p("| of which incorrect | %d |\n", incorrectCount(suite))
 		p("| top-1 accuracy | %.0f%% |\n", c.Accuracy*100)
-		p("| ECE @ default T=26 | %.1f%% |\n", c.DefaultECE*100)
+		p("| ECE @ default T=%.0f | %.1f%% |\n", score.DefaultTemperature, c.DefaultECE*100)
 		p("| ECE @ fitted T=%.1f | %.1f%% |\n", c.Temperature, c.ECE*100)
 		if l := suite.LOO; l != nil {
 			p("| LOO ECE (hardening) | %.1f%% |\n", l.LOOECE*100)
@@ -140,6 +148,12 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 				adopt = "yes"
 			}
 			p("| recalibrated T adopted | %s |\n", adopt)
+			p("| operating T | %.1f |\n", score.CurrentTemperature)
+			if !l.Adopt {
+				p("\n> **Calibration refused:** %s\n>\n", l.RefusalReason)
+				p("> The engine keeps its default temperature T=%.0f. A fitted temperature is\n", score.DefaultTemperature)
+				p("> only adopted when the suite can actually support one — see `score.adoptionRefusal`.\n")
+			}
 		}
 		if c.DefaultECE > 0.10 {
 			p("\n> ⚠️ ECE exceeds 10%% - displayed confidence is dampened toward 50%% (calibration rule).\n")
@@ -148,6 +162,55 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 		p("_No scenario carries ground truth - calibration not computable._\n")
 	}
 	p("\n")
+
+	// Robustness: does the evidence cause the verdict, and does the verdict
+	// survive cluster-scale volume?
+	if rb := suite.Robustness; rb != nil {
+		p("## Robustness\n\n")
+
+		mPassed, mTotal := rb.MutationTotals()
+		p("### Mutation gate (is the verdict caused by the evidence?)\n\n")
+		if mTotal == 0 {
+			p("_No mutations declared._\n\n")
+		} else {
+			p("Each mutation deletes the evidence a verdict rests on and requires the verdict to move.\n")
+			p("A verdict that survives the loss of its own support was never caused by it.\n\n")
+			p("| scenario | mutation | removed | verdict after | result |\n")
+			p("|---|---|---:|---|---|\n")
+			for _, r := range suite.Results {
+				for _, m := range rb.Mutations[r.Scenario] {
+					outcome := "✅ as declared"
+					if !m.Passed {
+						outcome = "❌ " + stringsJoin(m.Reasons, "; ")
+					}
+					p("| %s | %s | %d obs | %s (%.0f%%) | %s |\n",
+						r.Scenario, m.Name, m.Removed, m.Category, m.Score*100, outcome)
+				}
+			}
+			p("\n**Mutation gate: %d/%d held**\n\n", mPassed, mTotal)
+		}
+
+		nStable, nTotal := rb.NoiseTotals()
+		p("### Noise gate (does the verdict survive scale?)\n\n")
+		p("Every scenario is replayed buried under %d irrelevant observations from unrelated\n", rb.NoiseN)
+		p("workloads, spread across the same window. Recorded scenarios carry 4–25 observations;\n")
+		p("a production namespace carries thousands. This is the only gate that probes that gap.\n\n")
+		p("| scenario | verdict | under noise | confidence drift | result |\n")
+		p("|---|---|---|---:|---|\n")
+		for _, n := range rb.Noise {
+			base := n.BaselineCategory
+			if base == "" {
+				base = "(silent)"
+			}
+			outcome := "✅ held"
+			if !n.Stable {
+				outcome = "❌ " + n.Reason
+			}
+			p("| %s | %s | %s | %+.1f%% | %s |\n",
+				n.Scenario, base, n.NoisyCategory, n.ScoreDrift()*100, outcome)
+		}
+		p("\n**Noise gate: %d/%d verdicts held at %d× scale**\n\n", nStable, nTotal, rb.NoiseN)
+	}
 
 	// False-positive check.
 	p("## False-positive check\n\n")

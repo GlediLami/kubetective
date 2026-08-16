@@ -9,3 +9,10 @@ ground_truth:
   expected_finding_analyzers:
     - imagepull
   expected_status: IMAGEPULLBACKOFF
+mutations:
+  - name: without-waiting-state
+    reason: >-
+      ImagePullBackOff lives in the container's waiting reason. Without it the
+      pod is merely Pending and the honest verdict is a scheduling problem.
+    remove_kinds: [container.waiting]
+    expect_category: scheduling

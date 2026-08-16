@@ -1,0 +1,13 @@
+name: ambiguous-stale-commit
+description: >-
+  HARD SET. The api container exits 1 in a loop. A commit touching api.yaml
+  landed 52 minutes before the first crash — far enough back that attributing
+  the outage to it is a guess, close enough that a correlation-driven engine
+  will reach for it anyway. This is the false-attribution trap: the presence of
+  a commit is not evidence that the commit did anything. Ground truth is a
+  plain application crash loop; the commit is a bystander.
+ground_truth:
+  root_cause: "Application crash loop (exit 1); the 52-minute-old commit is unrelated"
+  top_hypothesis_category: crashloop
+  advisory: true
+  max_score: 0.95

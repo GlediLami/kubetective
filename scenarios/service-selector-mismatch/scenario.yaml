@@ -9,3 +9,11 @@ ground_truth:
   expected_finding_analyzers:
     - service
   expected_status: NOENDPOINTS
+mutations:
+  - name: without-the-service
+    reason: >-
+      The selector mismatch is the entire finding. With no service observed the
+      two pods are simply healthy, and the engine must fall silent rather than
+      invent a cause.
+    remove_kinds: [service.state]
+    expect_no_findings: true

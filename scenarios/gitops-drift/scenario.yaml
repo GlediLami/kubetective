@@ -11,3 +11,10 @@ ground_truth:
     - configregression
     - crashloop
   expected_status: CRASHLOOPBACKOFF
+mutations:
+  - name: without-argocd-state
+    reason: >-
+      Degraded/OutOfSync is the whole basis for calling this a config regression
+      when no local git checkout is available.
+    remove_kinds: [gitops.state]
+    expect_category: crashloop

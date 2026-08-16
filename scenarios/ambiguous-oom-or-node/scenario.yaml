@@ -1,0 +1,16 @@
+name: ambiguous-oom-or-node
+description: >-
+  HARD SET. The pod breaches its own 512Mi limit and is OOMKilled three times;
+  the node reports MemoryPressure — but only after the first kill. Did the node
+  starve the pod, or did the pod starve the node? The recorded evidence cannot
+  settle it: both readings fit the same timeline. Ground truth is memory (the
+  container exceeded a limit it set for itself; the node condition is
+  downstream), but an engine that answers "node" here is not being stupid, it
+  is being overconfident. The gate does not require the right answer — it
+  requires the engine not to rule out the alternative.
+ground_truth:
+  root_cause: "Container exceeded its own memory limit; node pressure followed as a consequence"
+  top_hypothesis_category: memory
+  advisory: true
+  max_score: 0.95
+  expect_competing: true

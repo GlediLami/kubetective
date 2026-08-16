@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -28,6 +29,9 @@ type Scenario struct {
 	Name        string      `yaml:"name"`
 	Description string      `yaml:"description"`
 	GroundTruth GroundTruth `yaml:"ground_truth"`
+	// Mutations are the causal claims this scenario makes: remove this
+	// evidence and the verdict must move. See robustness.go.
+	Mutations []Mutation `yaml:"mutations,omitempty"`
 }
 
 type GroundTruth struct {
@@ -38,6 +42,23 @@ type GroundTruth struct {
 	ExpectedStatus           string   `yaml:"expected_status,omitempty"`
 	// ExpectNoFindings asserts the engine stays silent (false-positive gate).
 	ExpectNoFindings bool `yaml:"expect_no_findings,omitempty"`
+
+	// --- the hard set ---
+
+	// Advisory marks a scenario the engine is not required to get right. It
+	// still contributes a calibration point, but its failure never breaks the
+	// gate. This is what lets the suite carry genuinely under-determined
+	// incidents: without them every prediction is correct, and a benchmark the
+	// engine never fails cannot calibrate confidence at all
+	// (see score.adoptionRefusal).
+	Advisory bool `yaml:"advisory,omitempty"`
+	// MaxScore caps the top hypothesis's confidence. On an ambiguous incident
+	// the correct behaviour is not a right answer but a hedged one.
+	MaxScore float64 `yaml:"max_score,omitempty"`
+	// ExpectCompeting requires at least two live hypotheses on the target
+	// resource — the engine must report "multiple plausible causes" rather
+	// than ruling one out on evidence that cannot support the distinction.
+	ExpectCompeting bool `yaml:"expect_competing,omitempty"`
 }
 
 // Result is one scenario's verdict with the reasons behind it.
@@ -62,7 +83,22 @@ type Result struct {
 	// PlannedActions are the remediation actions the engine offers for this
 	// scenario (action safety metric: healthy scenarios must plan none).
 	PlannedActions []action.Action
+	// Advisory marks a hard-set scenario: it reports and calibrates, but its
+	// failure does not break the gate.
+	Advisory bool
+	// Competing is how many hypotheses stayed live on the target resource
+	// (status Likely or Candidate — i.e. not ruled out).
+	Competing int
+	// TopCategory is the category the engine actually chose on the clean
+	// replay — distinct from ExpectedCategory, which is what it should have
+	// chosen. The noise gate compares against this one: stability means the
+	// verdict does not move, not that it becomes correct.
+	TopCategory string
 }
+
+// GateFailed reports whether this result should break CI. Advisory scenarios
+// never do: they exist to measure the engine, not to constrain it.
+func (r *Result) GateFailed() bool { return !r.Passed && !r.Advisory }
 
 func (r *Result) Fail(format string, args ...any) {
 	r.Passed = false
@@ -105,6 +141,20 @@ func RunScenario(ctx context.Context, sc *Scenario, eng api.Investigator) (*Resu
 
 	gt := sc.GroundTruth
 	top := topHypothesis(out)
+	res.Advisory = gt.Advisory
+	res.Competing = countCompeting(out, top)
+	if top != nil {
+		res.TopCategory = string(top.Category)
+	}
+
+	if gt.MaxScore > 0 && top != nil && top.Score.Score > gt.MaxScore {
+		res.Fail("top hypothesis score = %.3f, want ≤ %.3f — the evidence does not support this much confidence",
+			top.Score.Score, gt.MaxScore)
+	}
+	if gt.ExpectCompeting && res.Competing < 2 {
+		res.Fail("only %d live hypothesis on the target; an under-determined incident must leave competitors standing",
+			res.Competing)
+	}
 
 	if gt.TopHypothesisCategory != "" || gt.MinScore > 0 {
 		if top == nil {
@@ -170,6 +220,38 @@ func findingTitles(fs []model.Finding) []string {
 	return out
 }
 
+// countCompeting counts hypotheses that stayed live on the top hypothesis's
+// resource: ruled-out ones do not count, so this measures how much genuine
+// ambiguity the engine is still reporting.
+func countCompeting(out *api.InvestigationResult, top *model.Hypothesis) int {
+	if top == nil {
+		return 0
+	}
+	n := 0
+	for i := range out.Hypotheses {
+		h := &out.Hypotheses[i]
+		if h.Status == model.StatusRuledOut {
+			continue
+		}
+		if sameResourceID(h.ID, top.ID) {
+			n++
+		}
+	}
+	return n
+}
+
+// sameResourceID mirrors hypothesis.resourceOf: IDs are "<category>.<resource>".
+func sameResourceID(a, b string) bool {
+	return resourcePart(a) == resourcePart(b)
+}
+
+func resourcePart(id string) string {
+	if i := strings.Index(id, "."); i >= 0 {
+		return id[i+1:]
+	}
+	return id
+}
+
 func topHypothesis(out *api.InvestigationResult) *model.Hypothesis {
 	var top *model.Hypothesis
 	for i := range out.Hypotheses {
@@ -199,6 +281,9 @@ type SuiteResult struct {
 	Results     []Result
 	Calibration *score.CalibrationReport // nil when no scenario carries truth
 	LOO         *score.LOOReport         // leave-one-out validation of the fit (v0.7)
+	// Robustness holds the mutation and noise gates: whether the verdicts are
+	// caused by the evidence, and whether they survive cluster-scale volume.
+	Robustness *RobustnessReport
 }
 
 // CategoryAccuracy is the top-1 category accuracy per ground-truth category.
@@ -228,7 +313,10 @@ func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (
 	}
 	sort.Strings(dirs)
 
-	out := &SuiteResult{}
+	out := &SuiteResult{Robustness: &RobustnessReport{
+		Mutations: map[string][]MutationResult{},
+		NoiseN:    noiseScenarioCount,
+	}}
 	for _, d := range dirs {
 		dir := filepath.Join(scenariosDir, d)
 		sc, err := LoadScenario(filepath.Join(dir, "scenario.yaml"))
@@ -245,6 +333,13 @@ func RunSuite(ctx context.Context, scenariosDir string, factory EngineFactory) (
 			return nil, err
 		}
 		out.Results = append(out.Results, *r)
+
+		// Robustness gates run against the same recorded evidence: mutation
+		// (verdict must move when its support is removed) and noise (verdict
+		// must hold when irrelevant volume is added).
+		if err := runRobustness(ctx, sc, r, inc.Observations, factory, out.Robustness); err != nil {
+			return nil, err
+		}
 	}
 
 	// Calibration across all scenarios with ground truth (temperature fit).

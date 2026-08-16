@@ -10,3 +10,12 @@ ground_truth:
   expected_finding_analyzers:
     - oom
   expected_status: OOMKILLED
+mutations:
+  - name: termination-records-are-redundant
+    reason: >-
+      Inverse claim - this one asserts the verdict must NOT move. The OOMKilling
+      events and the memory limit independently establish the mechanism, so
+      dropping all 17 termination records must leave the diagnosis standing.
+      Recorded because it documents where the engine's redundancy actually lies.
+    remove_kinds: [container.terminated]
+    expect_category: memory

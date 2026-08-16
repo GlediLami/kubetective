@@ -11,3 +11,10 @@ ground_truth:
     - pvc
     - scheduling
   expected_status: PVCUNBOUND
+mutations:
+  - name: without-the-claim
+    reason: >-
+      The unbound PVC is what makes this a storage problem rather than generic
+      unschedulability; the verdict must degrade to scheduling, not stay pvc.
+    remove_kinds: [pvc.state]
+    expect_category: scheduling

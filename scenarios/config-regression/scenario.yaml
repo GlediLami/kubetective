@@ -11,3 +11,10 @@ ground_truth:
     - configregression
     - oom
   expected_status: OOMKILLED
+mutations:
+  - name: without-the-commit
+    reason: >-
+      The commit is what makes this a regression rather than an ordinary OOM.
+      Remove the attribution and the verdict must fall back to the mechanism.
+    remove_kinds: [git.commit]
+    expect_category: memory

@@ -11,3 +11,11 @@ ground_truth:
     - probe
     - crashloop
   expected_status: CRASHLOOPBACKOFF
+mutations:
+  - name: without-probe-events
+    reason: >-
+      The probe events are the only evidence distinguishing a kubelet-induced
+      restart loop from an application crash loop. Both look identical in the
+      container states alone.
+    remove_kinds: [event.recorded]
+    expect_category: crashloop

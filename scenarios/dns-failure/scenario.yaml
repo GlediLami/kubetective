@@ -11,3 +11,17 @@ ground_truth:
     - dns
     - crashloop
   expected_status: CRASHLOOPBACKOFF
+mutations:
+  - name: without-coredns-state
+    reason: >-
+      coreDNS sitting at zero available replicas is the only thing separating a
+      DNS outage from an ordinary crash loop. Without it the engine must not
+      claim DNS.
+    remove_kinds: [deployment.state]
+    expect_category: crashloop
+  - name: without-sandbox-events
+    reason: >-
+      The FailedToCreatePodSandBox / 'no such host' events carry the resolution
+      failure itself.
+    remove_kinds: [event.recorded]
+    expect_category: crashloop
