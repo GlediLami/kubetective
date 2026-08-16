@@ -95,6 +95,28 @@ else
   fi
 fi
 
+# --- brew tap coordinates ---------------------------------------------------------------
+# `brew install <owner>/<tap>/<formula>` resolves to the repo
+# <owner>/homebrew-<tap>. Ours is GlediLami/homebrew-kubetective, so the tap
+# segment must be "kubetective" - writing "tap" points brew at
+# GlediLami/homebrew-tap, which does not exist. That shipped in the README once;
+# this check is why it will not again.
+[ "$QUIET" = 1 ] || printf "\n== brew install one-liner\n"
+BREW_EXPECT="gledilami/kubetective/kubetective"
+BREW_LINES="$(grep -rhoiE 'brew install [a-z0-9./-]+' README.md site/index.html CONTRIBUTING.md 2>/dev/null | sed 's/^[Bb]rew install //' | sort -u || true)"
+if [ -z "$BREW_LINES" ]; then
+  wrn "no brew install command found in the docs"
+else
+  while read -r coord; do
+    [ -z "$coord" ] && continue
+    if [ "$(printf '%s' "$coord" | tr '[:upper:]' '[:lower:]')" = "$BREW_EXPECT" ]; then
+      ok "brew install ${coord}"
+    else
+      bad "brew install ${coord} -> tap repo does not exist; want ${BREW_EXPECT}"
+    fi
+  done <<< "$BREW_LINES"
+fi
+
 # --- docs freshness ----------------------------------------------------------------------
 [ "$QUIET" = 1 ] || printf "== CONTRIBUTING.md\n"
 if grep -nE 'git tag v[0-9]' CONTRIBUTING.md; then

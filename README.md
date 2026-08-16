@@ -56,7 +56,7 @@ re-run without a cluster.
 ## Install
 
 ```sh
-brew install GlediLami/tap/kubetective          # Homebrew
+brew install gledilami/kubetective/kubetective   # Homebrew
 go install github.com/GlediLami/kubetective/cmd/kubetective@latest
 ```
 
