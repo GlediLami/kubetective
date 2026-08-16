@@ -40,19 +40,19 @@ func parseAlertPayload(typeStr, file string) (*alert.Payload, error) {
 // API keys - the payload is parsed locally, the engine uses its existing
 // cluster access, and the opt-in completion webhook reports back out.
 func newAlertCmd() *cobra.Command {
-var (
-	alertType     string
-	file          string
-	since         time.Duration
-	format        string
-	noLogs        bool
-	namespace     string
-	kubeconfig    string
-	context       string
-	prometheusURL string
-	lokiURL       string
-	gitRepo       string
-)
+	var (
+		alertType     string
+		file          string
+		since         time.Duration
+		format        string
+		noLogs        bool
+		namespace     string
+		kubeconfig    string
+		context       string
+		prometheusURL string
+		lokiURL       string
+		gitRepo       string
+	)
 	cmd := &cobra.Command{
 		Use:   "alert [pagerduty|grafana|slack]",
 		Short: "Investigate from a webhook alert payload (PagerDuty, Grafana, Slack)",

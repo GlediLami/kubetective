@@ -188,11 +188,11 @@ func parsePagerDuty(body []byte) (*Payload, error) {
 // target extraction.
 
 type grafanaLegacy struct {
-	Title      string `json:"title"`
-	State      string `json:"state"`
-	Message    string `json:"message"`
-	RuleName   string `json:"ruleName"`
-	RuleURL    string `json:"ruleUrl"`
+	Title       string `json:"title"`
+	State       string `json:"state"`
+	Message     string `json:"message"`
+	RuleName    string `json:"ruleName"`
+	RuleURL     string `json:"ruleUrl"`
 	EvalMatches []struct {
 		Tags map[string]any `json:"tags"`
 	} `json:"evalMatches"`
