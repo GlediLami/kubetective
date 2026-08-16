@@ -27,18 +27,44 @@ const maxCommits = 200
 // Collector reads one git repository.
 type Collector struct {
 	repoPath string
-	// maxAge bounds the walk to commits within the window (plus slack).
-	maxAge time.Duration
+	// lookback bounds the walk to commits landing at most this long before the
+	// investigation window opens — a config regression precedes its incident,
+	// so the interesting commits sit just before Window.Start.
+	lookback time.Duration
+	// now is the clock used only when the request carries no window. Injectable
+	// so tests never depend on wall time.
+	now func() time.Time
 }
 
 var _ collect.Collector = (*Collector)(nil)
 
 // New creates a collector for a local git checkout.
 func New(repoPath string) *Collector {
-	return &Collector{repoPath: repoPath, maxAge: 48 * time.Hour}
+	return &Collector{repoPath: repoPath, lookback: 48 * time.Hour}
+}
+
+// WithClock overrides the fallback clock (tests).
+func (c *Collector) WithClock(now func() time.Time) *Collector {
+	c.now = now
+	return c
 }
 
 func (c *Collector) ID() string { return "git" }
+
+// cutoff is the oldest commit time worth walking to. It is anchored to the
+// investigation window rather than wall time: an incident replayed a week
+// later must still surface the commits that caused it. Only a request with no
+// window at all falls back to the clock.
+func (c *Collector) cutoff(scope *collect.ScopePlan) time.Time {
+	if scope != nil && !scope.Window.Start.IsZero() {
+		return scope.Window.Start.Add(-c.lookback)
+	}
+	now := time.Now
+	if c.now != nil {
+		now = c.now
+	}
+	return now().Add(-c.lookback)
+}
 
 // Collect walks the repository's history and emits git.commit observations
 // for commits whose changed files match the target workload.
@@ -61,7 +87,7 @@ func (c *Collector) Collect(_ context.Context, scope *collect.ScopePlan) ([]mode
 	defer iter.Close()
 
 	refs := []model.SourceRef{{System: "git", Query: "git log --name-only (matching target)"}}
-	cutoff := time.Now().Add(-c.maxAge)
+	cutoff := c.cutoff(scope)
 	var obs []model.Observation
 
 	count := 0
@@ -69,6 +95,12 @@ func (c *Collector) Collect(_ context.Context, scope *collect.ScopePlan) ([]mode
 		count++
 		if count > maxCommits || commit.Committer.When.Before(cutoff) {
 			return storer.ErrStop
+		}
+		// Commits landing after the incident window closed cannot have caused
+		// it. Skip, don't stop: git log walks newest-first, so older (relevant)
+		// commits are still ahead.
+		if scope != nil && !scope.Window.End.IsZero() && commit.Committer.When.After(scope.Window.End) {
+			return nil
 		}
 		// Which target workloads could this commit have touched? Stats =
 		// changed files vs first parent (the diff, not the whole tree).

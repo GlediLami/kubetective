@@ -12,6 +12,7 @@ import (
 
 	"github.com/GlediLami/kubetective/internal/collect"
 	"github.com/GlediLami/kubetective/internal/model"
+	"github.com/GlediLami/kubetective/pkg/api"
 )
 
 // buildTestRepo creates a temp git repo with two commits:
@@ -50,6 +51,13 @@ func buildTestRepo(t *testing.T) string {
 	return dir
 }
 
+// incidentWindow is the window the test repo's commits precede: the cache bump
+// lands at 13:45, the incident opens at 14:00.
+var incidentWindow = api.Window{
+	Start: time.Date(2026, 8, 7, 14, 0, 0, 0, time.UTC),
+	End:   time.Date(2026, 8, 7, 14, 30, 0, 0, time.UTC),
+}
+
 func TestGitCollectorFindsMatchingCommits(t *testing.T) {
 	dir := buildTestRepo(t)
 	c := New(dir)
@@ -59,6 +67,7 @@ func TestGitCollectorFindsMatchingCommits(t *testing.T) {
 	// api - manifests name the workload, not the pod.
 	obs, refs, err := c.Collect(context.Background(), &collect.ScopePlan{
 		Targets: []model.ResourceRef{pod},
+		Window:  incidentWindow,
 		Prior: []model.Observation{{
 			ID:       "obs-pod",
 			Kind:     "pod.state",
@@ -89,11 +98,72 @@ func TestGitCollectorFindsMatchingCommits(t *testing.T) {
 	}
 }
 
+// TestGitCollectorWindowAnchoredNotWallClock is the regression test for the
+// collector's original defect: the walk cut off at time.Now()-48h, so git
+// attribution silently vanished for any incident older than two days —
+// including replayed ones, which broke the reproducibility guarantee. The
+// cutoff is now anchored to the investigation window, so replaying an old
+// incident years later must still surface the commits that caused it.
+func TestGitCollectorWindowAnchoredNotWallClock(t *testing.T) {
+	dir := buildTestRepo(t)
+	// A clock far past the commits: under the old wall-clock cutoff every
+	// commit would be pruned before the file matcher ever ran.
+	future := func() time.Time { return time.Date(2031, 1, 1, 0, 0, 0, 0, time.UTC) }
+	c := New(dir).WithClock(future)
+
+	dep := model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "api"}
+	obs, _, err := c.Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{dep},
+		Window:  incidentWindow,
+	})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(obs) != 2 {
+		t.Fatalf("commits = %d, want 2 — the window, not the wall clock, must bound the walk", len(obs))
+	}
+
+	// With no window the collector has nothing to anchor to and falls back to
+	// the clock. That path stays lookback-bounded by design.
+	obs, _, err = c.Collect(context.Background(), &collect.ScopePlan{Targets: []model.ResourceRef{dep}})
+	if err != nil {
+		t.Fatalf("Collect (no window): %v", err)
+	}
+	if len(obs) != 0 {
+		t.Fatalf("windowless commits = %d, want 0 (clock fallback bounds the walk)", len(obs))
+	}
+}
+
+// TestGitCollectorSkipsCommitsAfterWindow: a commit landing after the incident
+// closed cannot have caused it.
+func TestGitCollectorSkipsCommitsAfterWindow(t *testing.T) {
+	dir := buildTestRepo(t)
+	dep := model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "api"}
+	// Window closes at 13:00 — before the 13:45 cache bump, after the 12:00 add.
+	obs, _, err := New(dir).Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{dep},
+		Window: api.Window{
+			Start: time.Date(2026, 8, 7, 12, 30, 0, 0, time.UTC),
+			End:   time.Date(2026, 8, 7, 13, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatalf("Collect: %v", err)
+	}
+	if len(obs) != 1 {
+		t.Fatalf("commits = %d, want 1 (the 13:45 bump post-dates the window)", len(obs))
+	}
+	if got := obs[0].Payload["message"]; got != "add api deployment" {
+		t.Errorf("commit = %v, want the 12:00 add", got)
+	}
+}
+
 func TestGitCollectorNoMatch(t *testing.T) {
 	dir := buildTestRepo(t)
 	c := New(dir)
 	obs, _, err := c.Collect(context.Background(), &collect.ScopePlan{
 		Targets: []model.ResourceRef{{Kind: "deployment", Namespace: "prod", Name: "unrelated-workload"}},
+		Window:  incidentWindow,
 	})
 	if err != nil {
 		t.Fatalf("Collect: %v", err)
