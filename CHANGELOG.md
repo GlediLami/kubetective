@@ -69,6 +69,24 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ### Fixed
 
+- **Incident memory matched every investigation against itself.** The live
+  investigate path passes the saved record's *filename* to `memory.Similar`
+  (it has the path in hand), while `Store.List` yields bare ids — so the
+  self-exclusion compared `incident-123.jsonl` against `incident-123`, never
+  matched, and every real investigation opened with a "similar past incident"
+  note at 100% overlap pointing at itself. The "seen this before?" feature the
+  roadmap calls the highest-value one for operational trust had been answering
+  "yes, itself" since v0.8. Every unit test passed bare ids, so nothing caught
+  it until an investigation ran against a live cluster. `Similar` now
+  normalises any accepted reference form.
+- **Redaction leaked through nested payloads and image references in text.**
+  Real Kubernetes payloads are not flat: `deployment.state.conditions[]` is a
+  list of objects whose `message` names the replicaset, and event messages
+  quote the container image. The redactor rewrote string list items but passed
+  nested objects through verbatim, and aliased images only under the `image`
+  key. Both survived into a sanitised record. Found by sanitising the first
+  live recording; every hand-authored scenario had flat payloads and no
+  image-in-message events.
 - **A unit test was overwriting the real user config.** `internal/diag` set
   `KUBECTIVE_HOME` — one character short of `KUBETECTIVE_HOME` — so the
   override silently never applied and every `go test ./...` run wrote

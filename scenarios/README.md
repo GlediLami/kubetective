@@ -38,7 +38,7 @@ mutations:
 ```
 
 The gate deletes that evidence, replays, and requires the verdict to move as
-declared. Thirteen such claims are checked. One of them is inverted on purpose
+declared. Fifteen such claims are checked. One of them is inverted on purpose
 (`oom-after-deploy/termination-records-are-redundant`) and asserts the verdict
 must *not* move — documenting where the engine's redundancy actually lies.
 
@@ -62,9 +62,15 @@ Confidence can only be calibrated against predictions that were wrong.
 
 The hard set supplies those. It reports, it calibrates, and it never breaks CI.
 
-## Current suite (19)
+## Current suite (20)
 
-**Gated (16).** `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
+**From a live cluster (1).** `live-oom-config-regression` — a real OOMKill on a
+real kind cluster, traced to the real commit that caused it. Recorded from an
+actual API server (29 observations, 14 events, a captured log snippet, two git
+commits) and sanitised for publication. Everything else below was written by
+hand.
+
+**Gated (17).** Including the live one, plus `oom-after-deploy`, `oom-memory-growth`, `crashloop`,
 `imagepull`, `pending-unschedulable`, `bad-readiness-probe`,
 `liveness-probe-failure`, `node-pressure`, `pvc-unschedulable`,
 `service-selector-mismatch`, `hpa-at-max`, `config-regression`,

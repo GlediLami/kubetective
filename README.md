@@ -103,12 +103,17 @@ can gate CI. An LLM chat cannot.
 Four gates run on every commit. These are the real numbers, not aspirations:
 
 ```
-16/19 scenarios passed (3 hard-set scenarios are advisory: they calibrate, they do not gate)
-mutation gate: 13/13 causal claims held (verdict moves when its evidence is removed)
-noise gate:    19/19 verdicts held under 500 irrelevant observations
-calibration:   18 ground-truth points (2 incorrect), accuracy 89%
-  not adopted: out-of-sample ECE 19.9% does not beat the default 7.8%
+17/20 scenarios passed (3 hard-set scenarios are advisory: they calibrate, they do not gate)
+mutation gate: 15/15 causal claims held (verdict moves when its evidence is removed)
+noise gate:    20/20 verdicts held under 500 irrelevant observations
+calibration:   19 ground-truth points (2 incorrect), accuracy 89%
+  not adopted: out-of-sample ECE 18.6% does not beat the default 7.3%
 ```
+
+One of those twenty came off a live cluster rather than a text editor:
+[`live-oom-config-regression`](scenarios/live-oom-config-regression/) is a real
+OOMKill traced to the real commit that caused it, recorded from a real API
+server and sanitised for publication.
 
 Three things worth saying plainly, because most benchmarks bury them:
 
@@ -124,12 +129,12 @@ better.
 **Passing is not the same as reasoning.** Each scenario declares what its
 verdict depends on; the mutation gate deletes that evidence and requires the
 verdict to move. An engine that keyed on "which analyzer fired" would pass all
-19 scenarios and fail this.
+20 scenarios and fail this.
 
-**The suite is small and the records are miniatures** — 4 to 25 observations,
-where a production namespace carries thousands. The noise gate closes part of
-that gap. It is a proxy, not the real thing, and this is the project's weakest
-axis.
+**The suite is still mostly synthetic.** Nineteen of the twenty records are
+hand-authored miniatures, 4 to 25 observations, where a production namespace
+carries thousands. The noise gate closes part of that gap and the first live
+recording closes a little more, but this remains the project's weakest axis.
 
 The most useful thing you can contribute is a real incident, and
 `kubetective scenario new <incident-id>` does the mechanical work: sanitises

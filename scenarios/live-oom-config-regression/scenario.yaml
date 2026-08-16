@@ -1,0 +1,50 @@
+name: live-oom-config-regression
+description: >-
+  THE FIRST SCENARIO RECORDED FROM A LIVE CLUSTER. Everything here came off a
+  real API server, real kubelet events, real container logs, and a real git
+  history — not a hand-written fixture. A deployment ran a workload that warms
+  an in-memory cache sized by CACHE_SIZE_MB against a 256Mi limit. A commit
+  raised that cache from 64MB to 512MB "for hit rate"; the process allocated
+  past the limit, the kernel OOM-killed it, and the container entered a restart
+  loop. The engine has to name the commit, not the OOMKill — `kubectl` already
+  reports the OOMKill.
+
+  Worth noting what a real recording looks like next to the authored ones: 29
+  observations against their 4–25, fourteen events rather than one or two, a
+  captured log snippet, node capacity, and two git commits instead of one. This
+  is the shape the suite has been missing.
+ground_truth:
+  root_cause: >-
+    Configuration regression: a commit raised the warm-cache size from 64MB to
+    512MB while the container memory limit stayed at 256Mi, so the process was
+    OOMKilled on every start.
+  top_hypothesis_category: config-regression
+  min_score: 0.90
+  expected_finding_analyzers:
+    - configregression
+    - oom
+  expected_status: OOMKILLED
+
+mutations:
+  - name: without-the-commit
+    reason: >-
+      The commit is the whole difference between "this workload OOMs" and "this
+      workload started OOMing because of a change someone made". Strip the git
+      history and the honest remaining answer is the mechanism — memory
+      exhaustion — with no attribution attached to it.
+    remove_kinds: [git.commit]
+    expect_category: memory
+
+  - name: without-the-kill
+    reason: >-
+      A config regression is only a regression because something broke. Remove
+      the termination record and there is no failure left for the commit to
+      have caused, so the verdict must not remain config-regression however
+      suggestive the timing is.
+      (Recorded rough edge: the engine currently falls back to a DNS hypothesis
+      at ~50% here rather than going silent. Coin-flip confidence is at least
+      honest about how little is left, but reaching for DNS on a workload with
+      no DNS evidence is a lead worth chasing — hence the negative assertion
+      rather than pinning the category.)
+    remove_kinds: [container.terminated]
+    expect_category_not: config-regression
