@@ -31,7 +31,7 @@ import (
 var ErrNoCollectors = errors.New("engine: no collectors registered")
 
 // Version is stamped at build time (-ldflags "-X github.com/GlediLami/kubetective/internal/engine.Version=...").
-var Version = "v1.0.0"
+var Version = "v1.0.1"
 
 // Adaptive collection bounds: at most two targeted
 // rounds, ≤5 requests, total cost ≤ requestBudget.
