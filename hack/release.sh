@@ -6,8 +6,9 @@
 #   hack/release.sh v0.9.0             (or: make release VERSION=v0.9.0)
 #   hack/release.sh v0.9.0 --dry-run    (print every step, change nothing)
 #
-# Remaining manual steps (printed at the end): create the GitHub Release
-# and fill the krew manifest sha256 values from the release assets.
+# The GitHub Release itself is published by .github/workflows/release.yml,
+# which fires on the tag push below: goreleaser builds the artifacts, cosign
+# signs them keylessly, and a verify job re-checks the result.
 set -euo pipefail
 
 TAG="${1:?usage: hack/release.sh <version> [--dry-run]}"
@@ -38,8 +39,8 @@ go test ./...
 echo "== commit the bump"
 if [ "$DRY" = 1 ]; then
   echo "  [dry-run] would commit 'chore: bump version to ${TAG}'"
-elif [ -n "$(git status --porcelain internal/engine/engine.go Dockerfile kubectl-investigate.yaml)" ]; then
-  git add internal/engine/engine.go Dockerfile kubectl-investigate.yaml
+elif [ -n "$(git status --porcelain internal/engine/engine.go Dockerfile)" ]; then
+  git add internal/engine/engine.go Dockerfile
   git commit -m "chore: bump version to ${TAG}"
 fi
 
@@ -67,6 +68,5 @@ fi
 
 echo
 echo "release ${TAG} done${DRY:+, continuing}."
-echo "next: create the GitHub Release for ${TAG} with the changelog entry,"
-echo "then fill the krew manifest sha256 values (REPLACE_ME) from the"
-echo "release assets and submit to the plugin index."
+echo "the release workflow is now publishing ${TAG}: watch it with"
+echo "  gh run watch \$(gh run list --workflow=release --limit=1 --json databaseId -q '.[0].databaseId')"

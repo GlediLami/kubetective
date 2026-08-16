@@ -7,8 +7,6 @@
 # Sinks checked:
 #   engine   internal/engine/engine.go      -- canonical (single source)
 #   docker   Dockerfile ldflags Version     -- must equal engine exactly
-#   krew     kubectl-investigate.yaml        -- spec.version, every platform
-#                                              uri, sha256 shape
 #   formula  Formula/kubetective.rb          -- url must pin the LATEST git
 #                                              tag (release-pinned by design),
 #                                              sha256 64-hex
@@ -38,9 +36,6 @@ if [ -z "$ENGINE_VERSION" ]; then
   exit 1
 fi
 [ "$QUIET" = 1 ] || printf 'engine canonical version: %s\n\n' "$ENGINE_VERSION"
-KREW_VERSION="${ENGINE_VERSION%-dev}"
-KREW_BARE="${KREW_VERSION#v}"
-
 # --- Dockerfile ------------------------------------------------------------------------
 [ "$QUIET" = 1 ] || echo "== Dockerfile"
 if grep -q -- "engine.Version=${ENGINE_VERSION}" Dockerfile; then
@@ -48,29 +43,6 @@ if grep -q -- "engine.Version=${ENGINE_VERSION}" Dockerfile; then
 else
   bad "Dockerfile ldflags Version must be exactly ${ENGINE_VERSION}"
 fi
-
-# --- krew manifest --------------------------------------------------------------------
-[ "$QUIET" = 1 ] || echo "== kubectl-investigate.yaml (krew)"
-KREW_SPEC="$(sed -n 's/^  version: "\(.*\)".*/\1/p' kubectl-investigate.yaml)"
-if [ "$KREW_SPEC" = "$KREW_VERSION" ]; then
-  ok "spec.version ${KREW_SPEC}"
-else
-  bad "krew spec.version=${KREW_SPEC:-<missing>} want ${KREW_VERSION} (engine minus -dev)"
-fi
-if [ "$(grep -c "releases/download/${KREW_VERSION}/kubectl-investigate_${KREW_BARE}_" kubectl-investigate.yaml)" -eq 4 ]; then
-  ok "4 platform uris point at ${KREW_VERSION}"
-else
-  bad "krew platform uris must reference ${KREW_VERSION} (4 of them)"
-fi
-SHAS="$(grep -n 'sha256:' kubectl-investigate.yaml)"
-while read -r line; do
-  sha="$(printf '%s' "$line" | sed 's/.*sha256: *//; s/"//g; s/  *$//')"
-  if [ "$sha" = "REPLACE_ME" ]; then
-    wrn "krew sha256 still REPLACE_ME (fill from release assets before submitting the plugin)"
-  elif ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{64}$'; then
-    bad "krew sha256 malformed: $sha"
-  fi
-done <<< "$(printf '%s\n' "$SHAS" | grep -v '^$' || true)"
 
 # --- Formula (release-pinned to the latest tag) -----------------------------------------
 [ "$QUIET" = 1 ] || printf "\n== Formula/kubetective.rb\n"

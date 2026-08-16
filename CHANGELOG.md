@@ -74,8 +74,29 @@ us.
   confidence" claim; corrected to describe the adoption gate and the four CI
   gates.
 
+### Removed
+
+- **krew manifest and submission tooling.** Listing in the krew index requires
+  a PR into `kubernetes-sigs/krew-index` and their review — an application
+  nobody intended to file. `kubectl-investigate.yaml` and
+  `hack/submit-krew.sh` are gone, along with the krew checks in
+  `hack/check-version.sh`, which had been emitting four stale-sha256 warnings
+  on every run for a submission that was never going to happen. The version
+  check now reports 0 warnings.
+
+  The kubectl plugin is unaffected: it only needs a binary named
+  `kubectl-investigate` on `PATH`, which `make install-plugin` provides.
+
 ### Fixed
 
+- **The release image could not be built by goreleaser.** The `dockers` stanza
+  pointed at the top-level Dockerfile, which compiles from source — but
+  goreleaser's build context holds only the binaries it just built plus
+  `extra_files`, so the build died on `COPY NOTICE`. Split into
+  `Dockerfile.release` (copies prebuilt binaries, used by goreleaser) and the
+  existing Dockerfile (compiles from source, used by `docker build .` and the
+  container smoke test). Caught by the first real tag, which is what a release
+  rehearsal is for.
 - **Incident memory matched every investigation against itself.** The live
   investigate path passes the saved record's *filename* to `memory.Similar`
   (it has the path in hand), while `Store.List` yields bare ids — so the

@@ -35,8 +35,9 @@
       <h2>Install</h2>
       <h3>Homebrew</h3>
       <pre><code>brew install gledilami/kubetective/kubetective</code></pre>
-      <h3>kubectl plugin (krew)</h3>
-      <pre><code>kubectl krew install investigate</code></pre>
+      <h3>kubectl plugin</h3>
+      <pre><code>make install-plugin   # puts kubectl-investigate on your PATH
+kubectl investigate deployment/checkout --since=30m</code></pre>
       <h3>Binary / container</h3>
       <pre><code># GitHub release assets (linux/darwin, amd64/arm64, deb, rpm)
 # container image:

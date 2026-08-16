@@ -51,8 +51,7 @@ clean:
 
 # --- version maintenance (v0.9) -------------------------------------------------
 # The canonical version lives in internal/engine/engine.go; these targets
-# keep every other mention (Dockerfile, krew manifest, brew formula, tap
-# repo) in lockstep. check-version also runs in CI and as a pre-commit
+# keep every other mention (Dockerfile, brew formula, tap repo) in lockstep. check-version also runs in CI and as a pre-commit
 # hook (install-hooks).
 
 check-version:

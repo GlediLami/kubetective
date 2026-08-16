@@ -75,6 +75,12 @@ dockers:
     use: buildx
     goos: linux
     goarch: amd64
+    # goreleaser's build context is the binaries it just built plus extra_files
+    # - not the source tree - so this cannot be the top-level Dockerfile.
+    dockerfile: Dockerfile.release
+    extra_files:
+      - LICENSE
+      - NOTICE
     image_templates:
       - "ghcr.io/gledilami/kubetective:{{ .Version }}"
       - "ghcr.io/gledilami/kubetective:latest"
