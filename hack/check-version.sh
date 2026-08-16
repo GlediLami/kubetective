@@ -50,20 +50,34 @@ LATEST_TAG="$(git tag --sort=-version:refname | head -n1 || true)"
 if [ -z "$LATEST_TAG" ]; then
   wrn "no git tags found: skipping formula tag check (CI fetches tags)"
 else
-  # A release in flight is a LEGITIMATE one-gap state: the release flow
-  # pushes (bump commit, tag, formula) in sequence, so a CI run may start
-  # between the tag and the formula commits. Tolerate the gap ONLY while
-  # HEAD is the bump commit itself and the formula still pins the previous
-  # released version; any older drift is still a hard failure.
+  # A release in flight is a LEGITIMATE one-gap state, and for a tagged build
+  # it is the ONLY possible state: the formula's sha256 is computed from the
+  # tag's own source tarball, so the formula can never pin the tag it ships
+  # inside - updating it would change the tree and therefore the sha. The
+  # release flow pushes bump -> tag -> formula in sequence for exactly that
+  # reason, and .github/workflows/release.yml builds from the tag, where the
+  # formula still points at the previous release by construction.
+  #
+  # Tolerate the gap while the formula pins the previous released version AND
+  # either HEAD is the bump commit (a CI run racing the formula commit) or
+  # HEAD carries the latest tag (a release build). Any older drift is still a
+  # hard failure.
   RELEASE_IN_FLIGHT=0
   if ! grep -q "archive/refs/tags/${LATEST_TAG}.tar.gz" Formula/kubetective.rb; then
     HEAD_MSG="$(git log -1 --format=%s 2>/dev/null || true)"
     PREV_TAG="$(git tag --sort=-version:refname | sed -n '2p' || true)"
-    if [[ "$HEAD_MSG" == "chore: bump version to "${LATEST_TAG}"" ]] \
+    HEAD_TAGS="$(git tag --points-at HEAD 2>/dev/null || true)"
+    WHY=""
+    if [[ "$HEAD_MSG" == "chore: bump version to "${LATEST_TAG}"" ]]; then
+      WHY="HEAD is the ${LATEST_TAG} bump"
+    elif printf '%s\n' "$HEAD_TAGS" | grep -qx -- "${LATEST_TAG}"; then
+      WHY="HEAD is tagged ${LATEST_TAG} (release build)"
+    fi
+    if [ -n "$WHY" ] \
        && [ -n "$PREV_TAG" ] \
        && grep -q "archive/refs/tags/${PREV_TAG}.tar.gz" Formula/kubetective.rb; then
       RELEASE_IN_FLIGHT=1
-      note "      (release in flight: HEAD is the ${LATEST_TAG} bump, formula pins ${PREV_TAG})"
+      note "      (release in flight: ${WHY}, formula pins ${PREV_TAG})"
     fi
   fi
   if grep -q "archive/refs/tags/${LATEST_TAG}.tar.gz" Formula/kubetective.rb; then
