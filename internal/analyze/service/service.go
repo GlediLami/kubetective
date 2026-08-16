@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	weightNoEndpoints = 30.0
-	weightMismatch    = 20.0 // selector matches pods but endpoints are empty
-	weightPods        = 10.0 // healthy pods that should be endpoints
+	weightNoEndpoints = score.WeightPrimary
+	weightMismatch    = score.WeightCorroborating // selector matches pods but endpoints are empty
+	weightPods        = score.WeightContextual    // healthy pods that should be endpoints
+	weightUnhealthy   = score.WeightCorroborating // contradiction: with no ready pod, empty endpoints are a symptom
 )
 
 type Analyzer struct{}
@@ -25,6 +26,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "service" }
 func (a *Analyzer) Name() string { return "Service Endpoints" }
+
+// StatusLabel: a routing fault, reported only when nothing else claims the card.
+func (a *Analyzer) StatusLabel() string { return "NOENDPOINTS" }
+func (a *Analyzer) Precedence() int     { return 1 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	return o.Kind == "service.state"
@@ -49,13 +54,17 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		}
 		svcs[key].obs = o
 	}
-	// Healthy running pods in the same namespace (potential endpoints).
+	// Healthy running pods in the same namespace (potential endpoints), and
+	// pods that exist but are not Running - if every pod is down, empty
+	// endpoints are a consequence rather than a selector fault.
+	failingByNamespace := map[string]int{}
 	for _, o := range in.Observations {
 		if o.Kind != "pod.state" {
 			continue
 		}
 		phase, _ := o.Payload["phase"].(string)
 		if phase != "Running" {
+			failingByNamespace[o.Resource.Namespace]++
 			continue
 		}
 		for _, s := range svcs {
@@ -78,6 +87,7 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			continue // endpoints exist - nothing to diagnose
 		}
 		selector, _ := analyze.PayloadStringMap(s.obs.Payload, "selector")
+		failingPods := failingByNamespace[res.Namespace]
 
 		severity := model.SevWarning
 		title := "Service has no ready endpoints"
@@ -123,6 +133,20 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			}
 			evs = append(evs, ePods)
 			terms = append(terms, score.EvidenceTerm{ID: ePods.ID, Label: fmt.Sprintf("selector: %s", fmtSelector(selector)), Weight: weightPods, Strength: 1.0, Polarity: +1})
+		}
+
+		// Empty endpoints only indict the selector when there are healthy pods
+		// that *should* have been selected. With nothing ready, the absent
+		// endpoints are downstream of whatever is breaking the pods.
+		if s.readyPods == 0 && failingPods > 0 {
+			eUnhealthy := model.Evidence{
+				ID:          fmt.Sprintf("service.%s.unhealthy", res.Name),
+				Claim:       "no pod is ready - empty endpoints follow from the pods, not the selector",
+				Contradicts: []string{},
+				Weight:      weightUnhealthy, Strength: 1.0,
+			}
+			evs = append(evs, eUnhealthy)
+			terms = append(terms, score.EvidenceTerm{ID: eUnhealthy.ID, Label: fmt.Sprintf("contradicting: %d pod(s) not ready - endpoints are empty as a consequence", failingPods), Weight: weightUnhealthy, Strength: 1.0, Polarity: -1})
 		}
 
 		h := model.Hypothesis{

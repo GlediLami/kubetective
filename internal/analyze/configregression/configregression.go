@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	weightCommit  = 30.0 // git commit touching the workload
-	weightRecency = 25.0 // commit close before the incident onset
-	weightGitOps  = 25.0 // GitOps controller reports trouble around the onset
-	weightChange  = 10.0 // cluster-observed change on the workload
-	weightSymptom = 30.0 // mechanism: the failure follows the change
+	weightCommit       = score.WeightPrimary    // git commit touching the workload
+	weightRecency      = score.WeightStrong     // commit close before the incident onset
+	weightGitOps       = score.WeightStrong     // GitOps controller reports trouble around the onset
+	weightChange       = score.WeightContextual // cluster-observed change on the workload
+	weightNodePressure = score.WeightSupporting // contradiction: infrastructure trouble competes with the change
+	weightSymptom      = score.WeightPrimary    // mechanism: the failure follows the change
 )
 
 // maxRegressionAge is how far before the onset a commit still counts as a
@@ -37,6 +38,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "configregression" }
 func (a *Analyzer) Name() string { return "Configuration Regression" }
+
+// This analyzer never claims the incident status card: explains why a workload broke, not what state it is in.
+func (a *Analyzer) StatusLabel() string { return "" }
+func (a *Analyzer) Precedence() int     { return 0 }
 
 // Supports activates on anything that signals a behavior change: git commits,
 // GitOps reconciles, or cluster changes (deployment.state).
@@ -114,6 +119,18 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		}
 		return false
 	}
+	// Node-level pressure is an infrastructure explanation competing with the
+	// change hypothesis.
+	nodePressure := false
+	for _, o := range in.Observations {
+		if o.Kind == "node.condition" && o.Payload["status"] == "True" {
+			if t, _ := o.Payload["type"].(string); t == "MemoryPressure" || t == "DiskPressure" || t == "PIDPressure" {
+				nodePressure = true
+				break
+			}
+		}
+	}
+
 	for key := range keys {
 		var terms []score.EvidenceTerm
 		var evs []model.Evidence
@@ -200,6 +217,20 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		missing := 0
 		if commit == nil {
 			missing = 1 // no git evidence - regression claim rests on weaker signals
+		}
+
+		// Node pressure is an infrastructure explanation that owes nothing to the
+		// change: a workload failing on a starved node would fail whatever its
+		// config said.
+		if nodePressure {
+			eNode := model.Evidence{
+				ID:          fmt.Sprintf("configregression.%s.nodepressure", resName(res)),
+				Claim:       "node-level pressure - the failure has an infrastructure explanation",
+				Contradicts: []string{},
+				Weight:      weightNodePressure, Strength: 0.8,
+			}
+			evs = append(evs, eNode)
+			terms = append(terms, score.EvidenceTerm{ID: eNode.ID, Label: "contradicting: node under pressure (infrastructure, not the change)", Weight: weightNodePressure, Strength: 0.8, Polarity: -1})
 		}
 
 		claim := "Configuration regression: a change preceded the incident"

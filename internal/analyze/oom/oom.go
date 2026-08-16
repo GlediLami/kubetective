@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	weightTemporal     = 30.0
-	weightMechanism    = 20.0
-	weightMetricBreach = 20.0 // Prometheus: usage reached the limit
-	weightMetricGrowth = 15.0 // Prometheus: usage grew within the window
-	weightLimit        = 15.0
-	weightReproduce    = 10.0
-	weightNodePressure = 15.0 // contradiction when node is under pressure
+	weightTemporal     = score.WeightPrimary
+	weightMechanism    = score.WeightCorroborating
+	weightMetricBreach = score.WeightCorroborating // Prometheus: usage reached the limit
+	weightMetricGrowth = score.WeightSupporting    // Prometheus: usage grew within the window
+	weightLimit        = score.WeightSupporting
+	weightReproduce    = score.WeightContextual
+	weightNodePressure = score.WeightSupporting // contradiction when node is under pressure
 )
 
 type Analyzer struct{}
@@ -31,6 +31,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "oom" }
 func (a *Analyzer) Name() string { return "Memory Exhaustion (OOMKilled)" }
+
+// StatusLabel: an OOMKill explains the restarts it causes.
+func (a *Analyzer) StatusLabel() string { return "OOMKILLED" }
+func (a *Analyzer) Precedence() int     { return 7 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	return o.Kind == "container.terminated" && o.Payload["reason"] == "OOMKilled"

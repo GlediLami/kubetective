@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	weightWaiting  = 30.0
-	weightExitCode = 15.0
-	weightRestarts = 10.0
-	weightLogs     = 10.0 // container logs captured (adaptive collection)
-	weightOOM      = 20.0 // contradiction: OOMKilled is the more specific explanation
+	weightWaiting  = score.WeightPrimary
+	weightExitCode = score.WeightSupporting
+	weightRestarts = score.WeightContextual
+	weightLogs     = score.WeightContextual    // container logs captured (adaptive collection)
+	weightOOM      = score.WeightCorroborating // contradiction: OOMKilled is the more specific explanation
 )
 
 type Analyzer struct{}
@@ -28,6 +28,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "crashloop" }
 func (a *Analyzer) Name() string { return "CrashLoopBackOff" }
+
+// StatusLabel: the loop itself, once no more specific cause is present.
+func (a *Analyzer) StatusLabel() string { return "CRASHLOOPBACKOFF" }
+func (a *Analyzer) Precedence() int     { return 4 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind == "container.waiting" {

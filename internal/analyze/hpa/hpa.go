@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	weightAtMax = 30.0
-	weightScale = 15.0 // scaling attempted but pinned
+	weightAtMax = score.WeightPrimary
+	weightScale = score.WeightSupporting // scaling attempted but pinned
 )
 
 type Analyzer struct{}
@@ -24,6 +24,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "hpa" }
 func (a *Analyzer) Name() string { return "Horizontal Autoscaling" }
+
+// This analyzer never claims the incident status card: amplifying context, never the card.
+func (a *Analyzer) StatusLabel() string { return "" }
+func (a *Analyzer) Precedence() int     { return 0 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	return o.Kind == "hpa.state"

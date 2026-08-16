@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	weightPending = 30.0
-	weightEvent   = 20.0 // FailedBinding / FailedMount event
-	weightRequest = 10.0 // requested storage
+	weightPending = score.WeightPrimary
+	weightEvent   = score.WeightCorroborating // FailedBinding / FailedMount event
+	weightRequest = score.WeightContextual    // requested storage
 )
 
 type Analyzer struct{}
@@ -25,6 +25,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "pvc" }
 func (a *Analyzer) Name() string { return "PersistentVolumeClaim Binding" }
+
+// StatusLabel: an unbound claim is a more specific reason to be Pending than scheduling.
+func (a *Analyzer) StatusLabel() string { return "PVCUNBOUND" }
+func (a *Analyzer) Precedence() int     { return 6 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind == "pvc.state" {

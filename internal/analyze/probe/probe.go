@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	weightEvent   = 30.0
-	weightMessage = 20.0
-	weightRestart = 10.0
+	weightEvent   = score.WeightPrimary
+	weightMessage = score.WeightCorroborating
+	weightRestart = score.WeightContextual
+	weightOOM     = score.WeightCorroborating // contradiction: an OOMKill outranks a failing probe
 )
 
 type Analyzer struct{}
@@ -26,6 +27,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "probe" }
 func (a *Analyzer) Name() string { return "Probe Failures" }
+
+// StatusLabel: probe state describes readiness, not why the process failed.
+func (a *Analyzer) StatusLabel() string { return "UNHEALTHY" }
+func (a *Analyzer) Precedence() int     { return 2 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind != "event.recorded" {
@@ -56,6 +61,15 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			order = append(order, key)
 		}
 		groups[key].events = append(groups[key].events, o)
+	}
+	// OOMKilled on the same resource argues against the probe explanation: a
+	// container the kernel killed for memory would fail its probes on the way
+	// down, so the probe failure is the symptom rather than the cause.
+	oomOnResource := map[string]bool{}
+	for _, o := range in.Observations {
+		if o.Kind == "container.terminated" && o.Payload["reason"] == "OOMKilled" {
+			oomOnResource[o.Resource.String()] = true
+		}
 	}
 	for _, o := range in.Observations {
 		g := groups[o.Resource.String()]
@@ -114,6 +128,16 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			}
 			evs = append(evs, eRestart)
 			terms = append(terms, score.EvidenceTerm{ID: eRestart.ID, Label: fmt.Sprintf("restarted after probe failures (×%d)", g.restarts), Weight: weightRestart, Strength: 1.0, Polarity: +1})
+		}
+		if oomOnResource[key] {
+			eOOM := model.Evidence{
+				ID:          fmt.Sprintf("probe.%s.oom", res.Name),
+				Claim:       "OOMKilled observed - the probe failure is downstream of the kill",
+				Contradicts: []string{},
+				Weight:      weightOOM, Strength: 1.0,
+			}
+			evs = append(evs, eOOM)
+			terms = append(terms, score.EvidenceTerm{ID: eOOM.ID, Label: "contradicting: OOMKilled present (probe failure is the symptom)", Weight: weightOOM, Strength: 1.0, Polarity: -1})
 		}
 
 		h := model.Hypothesis{

@@ -43,6 +43,21 @@ type Analyzer interface {
 	NeedsEvidence(h model.Hypothesis) []EvidenceRequest
 	// Explain renders a finding for the CLI even without an LLM.
 	Explain(f model.Finding) string
+
+	// StatusLabel is the incident status card this analyzer claims when its
+	// finding wins ("OOMKILLED", "PENDING", …). Empty means the analyzer
+	// contributes evidence but never sets the card — config regression and
+	// DNS explain *why* a pod is in a state, not what state it is in.
+	StatusLabel() string
+	// Precedence ranks analyzers competing for the status card: highest wins.
+	// The ordering encodes specificity — a node under pressure explains an
+	// OOMKill, which in turn explains a crash loop, so node > memory > crash.
+	// Zero means "never claims the card".
+	//
+	// Keeping this on the analyzer (rather than in a table the engine owns)
+	// means adding an analyzer is a single-file change; the engine cannot go
+	// stale because there is nothing engine-side to update.
+	Precedence() int
 }
 
 // PayloadInt64 reads an int64 field tolerating both live (int64) and

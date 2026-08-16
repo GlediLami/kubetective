@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	weightCoreDNSDown = 30.0 // coreDNS / kube-dns deployment unavailable
-	weightDNSEvents   = 25.0 // DNS-flavored events around the workload
-	weightSymptom     = 20.0 // mechanism: workload failing after DNS errors
+	weightCoreDNSDown = score.WeightPrimary       // coreDNS / kube-dns deployment unavailable
+	weightDNSEvents   = score.WeightStrong        // DNS-flavored events around the workload
+	weightSymptom     = score.WeightCorroborating // mechanism: workload failing after DNS errors
+	weightOOM         = score.WeightCorroborating // contradiction: an OOMKill explains the crash without DNS
 )
 
 // dnsMarkers are kubelet/event strings that indicate a DNS-resolution
@@ -41,6 +42,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "dns" }
 func (a *Analyzer) Name() string { return "DNS Failures" }
+
+// This analyzer never claims the incident status card: a contributing cause; the pod's own state owns the card.
+func (a *Analyzer) StatusLabel() string { return "" }
+func (a *Analyzer) Precedence() int     { return 0 }
 
 // NeedsEvidence: no adaptive requests - the collector always fetches
 // coreDNS availability and events.
@@ -152,6 +157,26 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		e := model.Evidence{ID: fmt.Sprintf("dns.%s.symptom", res.Name), Claim: "mechanism: workload failing after DNS errors", Weight: weightSymptom, Strength: 1.0}
 		evs = append(evs, e)
 		terms = append(terms, score.EvidenceTerm{ID: e.ID, Label: "mechanism: workload failing after DNS errors", Weight: weightSymptom, Strength: 1.0, Polarity: +1})
+	}
+
+	oomPresent := false
+	for _, o := range in.Observations {
+		if o.Kind == "container.terminated" && o.Payload["reason"] == "OOMKilled" {
+			oomPresent = true
+			break
+		}
+	}
+	// An OOMKilled container did not die of DNS. The events may still be real,
+	// but they are no longer the reason the workload is failing.
+	if oomPresent {
+		e := model.Evidence{
+			ID:          fmt.Sprintf("dns.%s.oom", res.Name),
+			Claim:       "OOMKilled observed - memory exhaustion explains the failure without DNS",
+			Contradicts: []string{},
+			Weight:      weightOOM, Strength: 1.0,
+		}
+		evs = append(evs, e)
+		terms = append(terms, score.EvidenceTerm{ID: e.ID, Label: "contradicting: OOMKilled present (the crash has a memory explanation)", Weight: weightOOM, Strength: 1.0, Polarity: -1})
 	}
 
 	severity := model.SevWarning

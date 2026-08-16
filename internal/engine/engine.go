@@ -105,7 +105,7 @@ func (e *Engine) Investigate(ctx context.Context, req *api.InvestigationRequest)
 	summary := &model.IncidentSummary{
 		ID:       fmt.Sprintf("incident-%d", started.Unix()),
 		Target:   req.Target,
-		Status:   statusFromFindings(findings),
+		Status:   e.statusFromFindings(findings),
 		Severity: severityFromFindings(findings),
 	}
 	res := &api.InvestigationResult{
@@ -244,43 +244,27 @@ func dedup(obs []model.Observation) []model.Observation {
 }
 
 // statusFromFindings derives the incident status card from analyzer findings.
-// Precedence: node pressure > OOM > PVC > image pull > crash loop > pending >
-// probe > service (the more specific/root-cause finding wins the card).
-func statusFromFindings(fs []model.Finding) string {
-	rank := map[string]int{
-		"nodepressure": 8,
-		"oom":          7,
-		"pvc":          6,
-		"imagepull":    5,
-		"crashloop":    4,
-		"scheduling":   3,
-		"probe":        2,
-		"service":      1,
+// The label and its precedence come from the analyzers themselves
+// (analyze.Analyzer.StatusLabel/Precedence), so registering an analyzer is the
+// only step needed to teach the engine a new status — there is no engine-side
+// table to keep in sync.
+//
+// Precedence encodes specificity: node pressure > OOM > PVC > image pull >
+// crash loop > pending > probe > service.
+func (e *Engine) statusFromFindings(fs []model.Finding) string {
+	byID := make(map[string]analyze.Analyzer, len(e.analyzers.All()))
+	for _, a := range e.analyzers.All() {
+		byID[a.ID()] = a
 	}
 	best, bestRank := "INVESTIGATED", 0
 	for _, f := range fs {
-		r, ok := rank[f.Analyzer]
-		if !ok || r <= bestRank {
+		a, ok := byID[f.Analyzer]
+		if !ok {
 			continue
 		}
-		bestRank = r
-		switch f.Analyzer {
-		case "nodepressure":
-			best = "NODEPRESSURE"
-		case "oom":
-			best = "OOMKILLED"
-		case "pvc":
-			best = "PVCUNBOUND"
-		case "imagepull":
-			best = "IMAGEPULLBACKOFF"
-		case "crashloop":
-			best = "CRASHLOOPBACKOFF"
-		case "scheduling":
-			best = "PENDING"
-		case "probe":
-			best = "UNHEALTHY"
-		case "service":
-			best = "NOENDPOINTS"
+		if r := a.Precedence(); r > bestRank && a.StatusLabel() != "" {
+			bestRank = r
+			best = a.StatusLabel()
 		}
 	}
 	return best

@@ -78,6 +78,41 @@ func Merge(hs []model.Hypothesis) []model.Hypothesis {
 	return out
 }
 
+// ID contract.
+//
+// A hypothesis ID is "<prefix>.<resource>" — "memory.checkout-7f84c9",
+// "crashloop.checkout-7f84c9". The outranking rule depends on it: two
+// hypotheses compete only when they concern the same resource, and that is
+// decided by everything after the first dot.
+//
+// The split is on the FIRST dot, not the last, so a resource name containing
+// dots still resolves correctly. What would break the rule is a prefix
+// containing one — hence ValidID, and the conformance test that runs every
+// analyzer's real output through it.
+const idSeparator = "."
+
+// NewID builds a conforming hypothesis ID. Analyzers should use it rather than
+// formatting the string themselves.
+func NewID(prefix, resource string) string {
+	return prefix + idSeparator + resource
+}
+
+// ValidID reports whether an ID can carry the outranking rule: a non-empty
+// dot-free prefix, a separator, and a non-empty resource.
+func ValidID(id string) bool {
+	i := strings.Index(id, idSeparator)
+	return i > 0 && i < len(id)-1
+}
+
+// SplitID returns the prefix and resource halves of a hypothesis ID.
+func SplitID(id string) (prefix, resource string) {
+	i := strings.Index(id, idSeparator)
+	if i < 0 {
+		return "", id
+	}
+	return id[:i], id[i+1:]
+}
+
 // sameResource reports whether two hypotheses concern the same resource,
 // inferred from their IDs ("memory.checkout-7f84c9" vs "crashloop.checkout-7f84c9").
 func sameResource(a, b *model.Hypothesis) bool {
@@ -85,10 +120,8 @@ func sameResource(a, b *model.Hypothesis) bool {
 }
 
 func resourceOf(id string) string {
-	if i := strings.Index(id, "."); i >= 0 {
-		return id[i+1:]
-	}
-	return id
+	_, resource := SplitID(id)
+	return resource
 }
 
 func scoreOf(h *model.Hypothesis) float64 {

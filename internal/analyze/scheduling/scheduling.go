@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	weightPending = 30.0
-	weightMessage = 20.0
-	weightRequest = 10.0
+	weightPending = score.WeightPrimary
+	weightMessage = score.WeightCorroborating
+	weightRequest = score.WeightContextual
+	weightPVC     = score.WeightCorroborating // contradiction: an unbound claim is the more specific reason to be Pending
 )
 
 type Analyzer struct{}
@@ -26,6 +27,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "scheduling" }
 func (a *Analyzer) Name() string { return "Scheduling / Pending Pods" }
+
+// StatusLabel: generic unschedulability: the fallback for a Pending pod.
+func (a *Analyzer) StatusLabel() string { return "PENDING" }
+func (a *Analyzer) Precedence() int     { return 3 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind == "pod.state" {
@@ -49,6 +54,19 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 	groups := map[string]*pending{}
 	var order []string
 
+	// An unbound claim in the same namespace is a named reason the scheduler
+	// is stuck; it competes with (and outranks) generic unschedulability.
+	unboundNamespaces := map[string]bool{}
+	for _, o := range in.Observations {
+		if o.Kind != "pvc.state" {
+			continue
+		}
+		if phase, _ := o.Payload["phase"].(string); phase != "Bound" {
+			unboundNamespaces[o.Resource.Namespace] = true
+		}
+	}
+	unboundPVC := map[string]bool{}
+
 	for _, o := range in.Observations {
 		key := o.Resource.String()
 		if o.Kind == "pod.state" && a.Supports(o) {
@@ -57,6 +75,9 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 				order = append(order, key)
 			}
 			groups[key].state = o
+			if unboundNamespaces[o.Resource.Namespace] {
+				unboundPVC[key] = true
+			}
 		}
 		if o.Kind == "event.recorded" && a.Supports(o) {
 			if groups[key] == nil {
@@ -131,6 +152,20 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			}
 			evs = append(evs, eReq)
 			terms = append(terms, score.EvidenceTerm{ID: eReq.ID, Label: fmt.Sprintf("requests: %s", fmtRequests(g.requests)), Weight: weightRequest, Strength: 1.0, Polarity: +1})
+		}
+
+		// An unbound PVC on the same pod is a more specific explanation than
+		// generic unschedulability: the scheduler is blocked for a reason we
+		// can name, so the generic hypothesis should not win on its own.
+		if unboundPVC[key] {
+			ePVC := model.Evidence{
+				ID:          fmt.Sprintf("scheduling.%s.pvc", res.Name),
+				Claim:       "unbound PersistentVolumeClaim - a more specific reason to be Pending",
+				Contradicts: []string{},
+				Weight:      weightPVC, Strength: 1.0,
+			}
+			evs = append(evs, ePVC)
+			terms = append(terms, score.EvidenceTerm{ID: ePVC.ID, Label: "contradicting: unbound PVC explains the Pending state more specifically", Weight: weightPVC, Strength: 1.0, Polarity: -1})
 		}
 
 		missing := 0

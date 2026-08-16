@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	weightCondition   = 40.0 // node pressure is the root cause above per-pod symptoms
-	weightCorroborate = 15.0 // second pressure type on the same node
-	weightMessage     = 10.0
+	weightCondition   = score.WeightDecisive   // node pressure is the root cause above per-pod symptoms
+	weightCorroborate = score.WeightSupporting // second pressure type on the same node
+	weightMessage     = score.WeightContextual
 )
 
 // pressureTypes are the node conditions this analyzer understands.
@@ -29,6 +29,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "nodepressure" }
 func (a *Analyzer) Name() string { return "Node Pressure" }
+
+// StatusLabel: a node under pressure explains every per-pod symptom on it.
+func (a *Analyzer) StatusLabel() string { return "NODEPRESSURE" }
+func (a *Analyzer) Precedence() int     { return 8 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind != "node.condition" {

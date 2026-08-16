@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	weightWaiting = 30.0
-	weightMessage = 15.0
-	weightImage   = 10.0
+	weightWaiting = score.WeightPrimary
+	weightMessage = score.WeightSupporting
+	weightImage   = score.WeightContextual
 )
 
 type Analyzer struct{}
@@ -25,6 +25,10 @@ func New() *Analyzer { return &Analyzer{} }
 
 func (a *Analyzer) ID() string   { return "imagepull" }
 func (a *Analyzer) Name() string { return "Image Pull Failure" }
+
+// StatusLabel: a missing image explains a stuck pod.
+func (a *Analyzer) StatusLabel() string { return "IMAGEPULLBACKOFF" }
+func (a *Analyzer) Precedence() int     { return 5 }
 
 func (a *Analyzer) Supports(o model.Observation) bool {
 	if o.Kind != "container.waiting" {
