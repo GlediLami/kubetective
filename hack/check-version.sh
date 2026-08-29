@@ -30,7 +30,12 @@ wrn()  { note "WARN  $*"; nwarn=$((nwarn+1)); }
 bad()  { note "FAIL  $*"; fail=$((fail+1)); }
 
 # --- canonical -----------------------------------------------------------------
-ENGINE_VERSION="$(sed -n 's/^var Version = "\([^"]*\)"/\1/p' internal/engine/engine.go)"
+# Version lives in a `var (...)` block alongside Commit and BuildDate, so the
+# match must tolerate leading indentation and an absent `var` keyword. awk is
+# used for its ERE support; the equivalent sed BRE is not portable to macOS.
+ENGINE_VERSION="$(awk -F'"' \
+  '/^[[:space:]]*(var[[:space:]]+)?Version[[:space:]]*=[[:space:]]*"/ {print $2; exit}' \
+  internal/engine/engine.go)"
 if [ -z "$ENGINE_VERSION" ]; then
   echo "check-version: cannot read internal/engine/engine.go" >&2
   exit 1

@@ -27,6 +27,8 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/GlediLami/kubetective/internal/engine.Version={{ .Version }}
+      - -X github.com/GlediLami/kubetective/internal/engine.Commit={{ .Commit }}
+      - -X github.com/GlediLami/kubetective/internal/engine.BuildDate={{ .Date }}
     goos: [linux, darwin]
     goarch: [amd64, arm64]
   - id: kubectl-investigate
@@ -36,6 +38,8 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/GlediLami/kubetective/internal/engine.Version={{ .Version }}
+      - -X github.com/GlediLami/kubetective/internal/engine.Commit={{ .Commit }}
+      - -X github.com/GlediLami/kubetective/internal/engine.BuildDate={{ .Date }}
     goos: [linux, darwin]
     goarch: [amd64, arm64]
 

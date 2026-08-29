@@ -5,10 +5,12 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -510,15 +512,39 @@ Exits 1 when anything is broken; warnings never fail the command.
 }
 
 func newVersionCmd() *cobra.Command {
-	return &cobra.Command{
+	var format string
+	var short bool
+	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), engine.Version)
-			return nil
+			if short || format == "" {
+				fmt.Fprintln(cmd.OutOrStdout(), engine.Version)
+				return nil
+			}
+			if format != "json" {
+				return fmt.Errorf("unsupported version format %q", format)
+			}
+			return json.NewEncoder(cmd.OutOrStdout()).Encode(versionInfo{
+				Version:   engine.Version,
+				Commit:    engine.Commit,
+				BuildDate: engine.BuildDate,
+				Go:        runtime.Version(),
+			})
 		},
 	}
+	cmd.Flags().StringVar(&format, "format", "", "output format: json")
+	cmd.Flags().BoolVar(&short, "short", false, "print the version string only")
+	return cmd
+}
+
+// versionInfo is the stable machine-readable contract for release tooling.
+type versionInfo struct {
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildDate string `json:"build_date,omitempty"`
+	Go        string `json:"go"`
 }
 
 // parseTarget turns "deployment/checkout", "pod/checkout-7f84c9", or a bare

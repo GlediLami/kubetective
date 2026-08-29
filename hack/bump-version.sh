@@ -20,9 +20,22 @@ fi
 
 cd "$(git rev-parse --show-toplevel)"
 
-sed -i.bak "s|^var Version = .*|var Version = \"${V}\"|" internal/engine/engine.go
+# Version sits in a `var (...)` block, so the pattern must tolerate leading
+# indentation and an absent `var` keyword. \{0,1\} is a POSIX BRE interval and
+# works under both GNU and BSD sed.
+sed -i.bak "s|^\([ 	]*\)\(var \)\{0,1\}Version\([ 	]*\)=[ 	]*\".*\"|\1\2Version\3= \"${V}\"|" internal/engine/engine.go
 sed -i.bak "s|engine.Version=[^\"]*|engine.Version=${V}|" Dockerfile
 rm -f internal/engine/engine.go.bak Dockerfile.bak
+
+# A no-op sed is the failure mode that matters here: it leaves the canonical
+# version untouched and every other sink bumped. Fail loudly instead.
+STAMPED="$(awk -F'"' \
+  '/^[[:space:]]*(var[[:space:]]+)?Version[[:space:]]*=[[:space:]]*"/ {print $2; exit}' \
+  internal/engine/engine.go)"
+if [ "$STAMPED" != "$V" ]; then
+  echo "bump-version: engine.go still reads '${STAMPED:-<unreadable>}' after the rewrite" >&2
+  exit 1
+fi
 
 ./hack/check-version.sh
 echo "version bumped to ${V}"
