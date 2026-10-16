@@ -110,7 +110,7 @@ func (s *REST) handleGetIncident(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "missing incident id")
 		return
 	}
-	inc, err := s.Store.Load(id)
+	inc, err := s.Store.LoadID(id)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, fmt.Sprintf("incident %q: %v", id, err))
 		return

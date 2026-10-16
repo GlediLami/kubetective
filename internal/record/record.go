@@ -24,10 +24,15 @@ import (
 
 const RecordVersion = 1
 
-// DefaultDir is where incident records live (~/.kubetective/incidents).
+// DefaultDir is where incident records live: $KUBETECTIVE_INCIDENTS_DIR, else
+// $KUBETECTIVE_HOME/incidents, else ~/.kubetective/incidents. It follows
+// KUBETECTIVE_HOME like the config file does, so doctor and the store agree.
 func DefaultDir() string {
 	if d := os.Getenv("KUBETECTIVE_INCIDENTS_DIR"); d != "" {
 		return d
+	}
+	if d := os.Getenv("KUBETECTIVE_HOME"); d != "" {
+		return filepath.Join(d, "incidents")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -147,6 +152,21 @@ func (s *Store) Save(inc *model.Incident) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// ErrInvalidID is returned by LoadID for anything that is not a plain record
+// id inside the store.
+var ErrInvalidID = errors.New("invalid incident id")
+
+// LoadID reads an incident record by ID from the store dir only. Unlike Load
+// it never accepts a path, so it is safe for ids that come from the network
+// (REST and MCP). An id must be a single file name: no separators, no "..".
+func (s *Store) LoadID(id string) (*model.Incident, error) {
+	id = strings.TrimSuffix(id, ".jsonl")
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\") || strings.Contains(id, "..") || filepath.IsAbs(id) {
+		return nil, fmt.Errorf("%w: %q", ErrInvalidID, id)
+	}
+	return s.Load(id)
 }
 
 // Load reads an incident record by ID (from the store dir) or by direct path.

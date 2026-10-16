@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -205,5 +206,35 @@ func TestRESTWebUIAndMetrics(t *testing.T) {
 	resp.Body.Close()
 	if !strings.Contains(string(body), "kubetective_investigations_total") {
 		t.Errorf("metrics missing counters: %q", string(body)[:200])
+	}
+}
+
+// TestRESTIncidentPathTraversal: an incident id is a file name in the store,
+// never a path. A record outside the store must not be readable, neither by
+// an absolute path nor by "..".
+func TestRESTIncidentPathTraversal(t *testing.T) {
+	outsideDir := t.TempDir()
+	outside := record.NewStore(outsideDir)
+	if _, err := outside.Save(&model.Incident{ID: "secret"}); err != nil {
+		t.Fatal(err)
+	}
+	store := record.NewStore(t.TempDir())
+	s := &REST{Inv: &scriptedInvestigator{res: testResult()}, Store: store}
+	srv := httptest.NewServer(s.Handler())
+	defer srv.Close()
+
+	abs, err := filepath.Abs(filepath.Join(outsideDir, "secret"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{abs, "../secret", "..%2Fsecret"} {
+		resp, err := http.Get(srv.URL + "/v1/incidents/" + url.PathEscape(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Errorf("id %q: status 200, a record outside the store was served", id)
+		}
 	}
 }

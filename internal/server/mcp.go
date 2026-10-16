@@ -219,7 +219,7 @@ func (m *MCPServer) loadIncident(id string) (*model.Incident, error) {
 	if m.Store == nil {
 		return nil, fmt.Errorf("no incident store configured")
 	}
-	return m.Store.Load(id)
+	return m.Store.LoadID(id)
 }
 
 func strArg(args map[string]any, key string) string {

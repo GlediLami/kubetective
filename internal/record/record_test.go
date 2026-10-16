@@ -302,3 +302,34 @@ func TestRecordFilePermissions(t *testing.T) {
 		t.Errorf("store dir mode = %o, want 700", perm)
 	}
 }
+
+func TestLoadIDRejectsPaths(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	if _, err := s.Save(&model.Incident{ID: "incident-1-ok"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.LoadID("incident-1-ok"); err != nil {
+		t.Fatalf("LoadID(valid) = %v", err)
+	}
+	if _, err := s.LoadID("incident-1-ok.jsonl"); err != nil {
+		t.Fatalf("LoadID(valid.jsonl) = %v", err)
+	}
+	for _, id := range []string{"", "..", "../x", "/etc/x", filepath.Join(dir, "incident-1-ok"), `..\x`, "a/b"} {
+		if _, err := s.LoadID(id); err == nil {
+			t.Errorf("LoadID(%q) succeeded, want an error", id)
+		}
+	}
+}
+
+func TestDefaultDirFollowsHome(t *testing.T) {
+	t.Setenv("KUBETECTIVE_INCIDENTS_DIR", "")
+	t.Setenv("KUBETECTIVE_HOME", "/tmp/kt-home")
+	if got, want := DefaultDir(), filepath.Join("/tmp/kt-home", "incidents"); got != want {
+		t.Errorf("DefaultDir = %q, want %q", got, want)
+	}
+	t.Setenv("KUBETECTIVE_INCIDENTS_DIR", "/tmp/kt-inc")
+	if got := DefaultDir(); got != "/tmp/kt-inc" {
+		t.Errorf("DefaultDir = %q, want the explicit incidents dir", got)
+	}
+}
