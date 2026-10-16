@@ -6,6 +6,8 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-16
+
 Fixes from a live check on a kind cluster (Kubernetes v1.36).
 
 ### Security

@@ -33,7 +33,7 @@ var ErrNoCollectors = errors.New("engine: no collectors registered")
 // Build metadata is stamped at release time with -ldflags. Empty values
 // identify a local development build.
 var (
-	Version   = "v1.0.1"
+	Version   = "v1.0.2"
 	Commit    string
 	BuildDate string
 )
