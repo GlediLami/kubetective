@@ -76,7 +76,7 @@ func Plan(res *api.InvestigationResult) []Action {
 				Reason:      fmt.Sprintf("%s after a change - reverting the configuration that preceded the failure", top.Claim),
 				Risk:        riskFor(top.Category),
 				EvidenceIDs: evidenceIDs(top),
-				DryRun:      fmt.Sprintf("kubectl rollout undo deployment/%s --dry-run=client", ch.Resource.Name),
+				DryRun:      fmt.Sprintf("kubectl rollout undo deployment/%s%s --dry-run=client", ch.Resource.Name, nsFlag(ch.Resource.Namespace)),
 			}
 			act.ID = idOf(act)
 			actions = append(actions, act)
@@ -94,13 +94,22 @@ func Plan(res *api.InvestigationResult) []Action {
 				Reason:      fmt.Sprintf("pod in state %s - a restart is the standard first recovery step", res.Incident.Status),
 				Risk:        model.RiskLow,
 				EvidenceIDs: evidenceIDs(top),
-				DryRun:      fmt.Sprintf("kubectl delete pod/%s --dry-run=client", res.Incident.Target.Name),
+				DryRun:      fmt.Sprintf("kubectl delete pod/%s%s --dry-run=client", res.Incident.Target.Name, nsFlag(res.Incident.Target.Namespace)),
 			}
 			act.ID = idOf(act)
 			actions = append(actions, act)
 		}
 	}
 	return actions
+}
+
+// nsFlag renders " -n <ns>" for the printed kubectl hint, so a copy-paste
+// acts on the same namespace the real apply uses.
+func nsFlag(ns string) string {
+	if ns == "" {
+		return ""
+	}
+	return " -n " + ns
 }
 
 // riskFor maps the top category to a blast-radius-informed risk level.

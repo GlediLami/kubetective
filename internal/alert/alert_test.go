@@ -203,3 +203,29 @@ func TestParseUnknownKind(t *testing.T) {
 		t.Fatal("unknown kind must error")
 	}
 }
+
+// Slack and PagerDuty text can carry the namespace. Without it the target had
+// an empty namespace and the lookup failed ("get deployment /checkout").
+func TestTextTargetNamespace(t *testing.T) {
+	cases := []struct {
+		kind Kind
+		body string
+		want model.ResourceRef
+	}{
+		{Slack, `{"text":"deployment/checkout namespace=prod since=15m"}`, model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}},
+		{Slack, `{"text":"deployment/checkout -n prod"}`, model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}},
+		{Slack, `{"text":"deployment/prod/checkout"}`, model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}},
+		{PagerDuty, `{"event":"incident.triggered","data":{"incident":{"title":"OOMKilled deployment/prod/checkout"}}}`, model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}},
+		{PagerDuty, `{"event":"incident.triggered","data":{"incident":{"title":"deployment checkout in namespace prod is OOMKilled"}}}`, model.ResourceRef{Kind: "deployment", Namespace: "prod", Name: "checkout"}},
+	}
+	for _, c := range cases {
+		p, err := Parse(c.kind, []byte(c.body))
+		if err != nil {
+			t.Errorf("%s %s: %v", c.kind, c.body, err)
+			continue
+		}
+		if p.Target != c.want {
+			t.Errorf("%s %s: target = %+v, want %+v", c.kind, c.body, p.Target, c.want)
+		}
+	}
+}

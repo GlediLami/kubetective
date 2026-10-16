@@ -347,3 +347,33 @@ func TestCollectSkipsMissingCoreDNS(t *testing.T) {
 		t.Fatalf("Collect without coredns must not fail: %v", err)
 	}
 }
+
+// "namespace/prod" arrives as Name=prod with an empty Namespace. The
+// collector must list pods in prod, not in "".
+func TestCollectNamespaceTargetUsesName(t *testing.T) {
+	pod := fakePod(t, "prod", "checkout-7f84c9")
+	other := fakePod(t, "staging", "other-1")
+	c := New(fake.NewSimpleClientset(pod, other, fakeNode()))
+	obs, _, err := c.Collect(context.Background(), &collect.ScopePlan{
+		Targets: []model.ResourceRef{{Kind: "namespace", Name: "prod"}},
+		Window: api.Window{
+			Start: time.Date(2026, 8, 7, 13, 30, 0, 0, time.UTC),
+			End:   time.Date(2026, 8, 7, 15, 0, 0, 0, time.UTC),
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]bool{}
+	for _, o := range obs {
+		if o.Resource.Kind == "pod" {
+			seen[o.Resource.Namespace+"/"+o.Resource.Name] = true
+		}
+	}
+	if !seen["prod/checkout-7f84c9"] {
+		t.Errorf("pod in prod not collected: %v", seen)
+	}
+	if seen["staging/other-1"] {
+		t.Errorf("pod from another namespace collected: %v", seen)
+	}
+}

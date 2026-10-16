@@ -140,6 +140,14 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		}
 	}
 
+	// coreDNS is observed in almost every cluster. Seen healthy and with no
+	// DNS-flavored event, it is not a DNS signal at all: emitting a
+	// hypothesis here made "DNS resolution failure (0 DNS errors)" the top
+	// cause for healthy workloads and whole namespaces.
+	if !down && len(dnsEvents) == 0 {
+		return nil, nil, nil, nil
+	}
+
 	var evs []model.Evidence
 	var terms []score.EvidenceTerm
 

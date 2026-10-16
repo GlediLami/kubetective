@@ -70,3 +70,22 @@ func TestDNSAnalyzerSilentWithoutDNS(t *testing.T) {
 		t.Fatalf("must stay silent on non-DNS incidents: %+v %+v", findings, hyps)
 	}
 }
+
+// A healthy coreDNS with no DNS-flavored event is not a DNS signal. Live
+// clusters always carry the coreDNS deployment, so this used to make "DNS
+// resolution failure (0 DNS errors)" the top cause for healthy workloads.
+func TestDNSAnalyzerSilentWithHealthyCoreDNS(t *testing.T) {
+	pod := model.ResourceRef{Kind: "pod", Namespace: "prod", Name: "web-abc"}
+	in := &analyze.AnalysisInput{Observations: []model.Observation{
+		obs("deployment.state", model.ResourceRef{Kind: "deployment", Namespace: "kube-system", Name: "coredns"},
+			map[string]any{"replicas": int64(2), "available_replicas": int64(2)}, time.Now()),
+		obs("pod.state", pod, map[string]any{"phase": "Running"}, time.Now()),
+	}}
+	findings, hyps, _, err := New().Analyze(context.Background(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 0 || len(hyps) != 0 {
+		t.Fatalf("healthy coreDNS alone must stay silent: %+v %+v", findings, hyps)
+	}
+}

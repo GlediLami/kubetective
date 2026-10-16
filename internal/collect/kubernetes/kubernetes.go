@@ -41,6 +41,24 @@ func Client(kubeconfig, context string) (kubernetes.Interface, *rest.Config, err
 	return c, cfg, err
 }
 
+// ContextNamespace is the namespace a target without one should use: the
+// namespace of the kubeconfig context, or "default" (kubectl's rule).
+func ContextNamespace(kubeconfig, context string) string {
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	if kubeconfig != "" {
+		loadingRules.ExplicitPath = kubeconfig
+	}
+	overrides := &clientcmd.ConfigOverrides{}
+	if context != "" {
+		overrides.CurrentContext = context
+	}
+	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, overrides)
+	if ns, _, err := cc.Namespace(); err == nil && ns != "" {
+		return ns
+	}
+	return "default"
+}
+
 // ClusterID anonymizes a cluster endpoint (server host from kubeconfig) into
 // a stable identifier for incident memory scoping (multi-cluster v0.9). Same
 // endpoint, same id; do not feed raw hostnames into records.

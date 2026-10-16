@@ -53,7 +53,14 @@ func (c *Collector) Collect(ctx context.Context, scope *collect.ScopePlan) ([]mo
 		case "deployment", "deploy":
 			o, r, err = c.collectDeployment(ctx, scope, t.Namespace, t.Name)
 		case "namespace", "ns":
-			o, r, err = c.collectNamespace(ctx, scope, t.Namespace)
+			// "namespace/prod" parses to Name=prod with no Namespace; the
+			// name is the namespace. Using t.Namespace alone listed pods in
+			// "" and found almost nothing.
+			ns := t.Namespace
+			if ns == "" {
+				ns = t.Name
+			}
+			o, r, err = c.collectNamespace(ctx, scope, ns)
 		case "":
 			o, r, err = c.collectNamespace(ctx, scope, t.Namespace)
 		default:
@@ -615,6 +622,10 @@ func containerStateObservation(pod *corev1.Pod, ctr *corev1.Container, res model
 		if w := st.State.Waiting; w != nil {
 			base["reason"] = w.Reason
 			base["message"] = w.Message
+			if lt := st.LastTerminationState.Terminated; lt != nil {
+				base["last_exit_code"] = lt.ExitCode
+				base["last_reason"] = lt.Reason
+			}
 			ts := pod.CreationTimestamp.Time
 			if pod.Status.StartTime != nil {
 				ts = pod.Status.StartTime.Time

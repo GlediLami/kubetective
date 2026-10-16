@@ -142,11 +142,11 @@ func (r *Report) cluster(ctx context.Context, o Options) {
 }
 
 func (r *Report) store(o Options) {
-	dir := o.StateDir
-	if dir == "" {
-		dir = config.DefaultDir()
+	// Check the directory the store really writes to.
+	incDir := record.DefaultDir()
+	if o.StateDir != "" {
+		incDir = filepath.Join(o.StateDir, "incidents")
 	}
-	incDir := filepath.Join(dir, "incidents")
 	if _, err := os.Stat(incDir); err != nil {
 		r.check("store", WARN, "no incidents recorded yet ("+incDir+")")
 		return

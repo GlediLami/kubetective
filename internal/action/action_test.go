@@ -45,6 +45,10 @@ func TestPlanRollbackOnRegression(t *testing.T) {
 	if !strings.Contains(acts[0].DryRun, "rollout undo") {
 		t.Errorf("dry_run = %q", acts[0].DryRun)
 	}
+	// The printed hint must name the namespace the apply uses.
+	if !strings.Contains(acts[0].DryRun, " -n prod ") {
+		t.Errorf("dry_run = %q, want -n prod", acts[0].DryRun)
+	}
 }
 
 func TestPlanNoChangeNoAction(t *testing.T) {

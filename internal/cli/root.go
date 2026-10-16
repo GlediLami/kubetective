@@ -347,6 +347,13 @@ func runInvestigationPipeline(cmd *cobra.Command, target model.ResourceRef, sinc
 		return nil, err
 	}
 	eng := newEngine(collectors...)
+	// A namespaced target without a namespace (bare CLI args, Slack and
+	// PagerDuty alerts) would hit ".../namespaces//deployments/x". Use the
+	// settings namespace, then the kubeconfig context namespace, like kubectl.
+	if target.Namespace == "" && target.Kind != "namespace" && target.Kind != "node" {
+		kc := config.FirstNonEmpty(opts.kubeconfig, os.Getenv("KUBECONFIG"), st.Kubeconfig)
+		target.Namespace = config.FirstNonEmpty(st.Namespace, k8scollect.ContextNamespace(kc, opts.context))
+	}
 	req := &api.InvestigationRequest{
 		Target: target,
 		Window: api.Since(since),
@@ -437,7 +444,10 @@ same result.`,
 }
 
 func newBenchmarkCmd() *cobra.Command {
-	var scenariosDir string
+	var (
+		scenariosDir string
+		adopt        bool
+	)
 	cmd := &cobra.Command{
 		Use:   "benchmark [suite]",
 		Short: "Run the scenario benchmark gate",
@@ -455,10 +465,11 @@ Exit code 1 if any scenario fails - this is the analyzer contribution gate.`,
 			if err != nil {
 				return err
 			}
-			return renderBenchmark(suite)
+			return renderBenchmark(suite, adopt)
 		},
 	}
 	cmd.Flags().StringVar(&scenariosDir, "scenarios", "scenarios", "directory containing benchmark scenarios")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "persist the validated calibration temperature to the config file")
 	return cmd
 }
 

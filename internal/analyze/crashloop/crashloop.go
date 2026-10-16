@@ -64,6 +64,20 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			groups[key].waiting = true
 		}
 	}
+	// Between two back-offs the kubelet reports the container as terminated,
+	// not waiting. A non-zero exit after at least two restarts is the same
+	// loop seen at a different moment, so it opens a group too. Without this
+	// the verdict depended on when the investigation happened to run.
+	for _, o := range in.Observations {
+		if o.Kind != "container.terminated" || !crashedRepeatedly(o) {
+			continue
+		}
+		key := o.Resource.String()
+		if groups[key] == nil {
+			groups[key] = &crash{}
+			order = append(order, key)
+		}
+	}
 	for _, o := range in.Observations {
 		g := groups[o.Resource.String()]
 		if g == nil {
@@ -111,6 +125,17 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 				codes = append(codes, c)
 			}
 		}
+		if len(codes) == 0 {
+			// While waiting in CrashLoopBackOff the exit code sits in the
+			// container's last termination state.
+			for _, o := range in.Observations {
+				if o.Kind == "container.waiting" && o.Resource.String() == key {
+					if c, ok := analyze.PayloadInt64(o.Payload, "last_exit_code"); ok {
+						codes = append(codes, c)
+					}
+				}
+			}
+		}
 		exitLabel := "exit code(s) unknown"
 		if len(codes) > 0 {
 			exitLabel = fmt.Sprintf("exit codes %v", codes)
@@ -134,7 +159,11 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 			Weight: weightWaiting, Strength: 1.0,
 		}
 		evs = append(evs, eWaiting)
-		terms = append(terms, score.EvidenceTerm{ID: eWaiting.ID, Label: "CrashLoopBackOff state", Weight: weightWaiting, Strength: 1.0, Polarity: +1})
+		waitingLabel := "CrashLoopBackOff state"
+		if !g.waiting {
+			waitingLabel = "crashed again after restart (between back-offs)"
+		}
+		terms = append(terms, score.EvidenceTerm{ID: eWaiting.ID, Label: waitingLabel, Weight: weightWaiting, Strength: 1.0, Polarity: +1})
 
 		eExit := model.Evidence{
 			ID:     fmt.Sprintf("crashloop.%s.exit", res.Name),
@@ -195,6 +224,21 @@ func (a *Analyzer) Analyze(_ context.Context, in *analyze.AnalysisInput) ([]mode
 		evidence = append(evidence, evs...)
 	}
 	return findings, hypotheses, evidence, nil
+}
+
+// crashedRepeatedly reports a container that exited non-zero (not OOM) after
+// at least two restarts.
+func crashedRepeatedly(o model.Observation) bool {
+	r, _ := o.Payload["reason"].(string)
+	if r == "OOMKilled" || r == "Completed" {
+		return false
+	}
+	code, ok := analyze.PayloadInt64(o.Payload, "exit_code")
+	if !ok || code == 0 {
+		return false
+	}
+	restarts, ok := analyze.PayloadInt64(o.Payload, "restarts")
+	return ok && restarts >= 2
 }
 
 func scoreBreakdown(terms []score.EvidenceTerm) *model.ScoreBreakdown {

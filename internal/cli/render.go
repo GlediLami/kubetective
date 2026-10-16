@@ -184,7 +184,8 @@ func renderJSON(res *api.InvestigationResult) error {
 }
 
 // renderBenchmark prints the scenario gate table + confidence calibration.
-func renderBenchmark(suite *benchmark.SuiteResult) error {
+// The validated temperature is persisted only when adopt is set.
+func renderBenchmark(suite *benchmark.SuiteResult, adopt bool) error {
 	w := os.Stdout
 	results := suite.Results
 	fmt.Fprintf(w, "%-28s %-8s %-9s %-7s %s\n", "SCENARIO", "STATUS", "SCORE", "TIME", "FAILURES")
@@ -262,9 +263,10 @@ func renderBenchmark(suite *benchmark.SuiteResult) error {
 	}
 
 	// Calibration hardening: adopt a leave-one-out-validated temperature,
-	// persisted for every future invocation - but only when the gate passed,
-	// so a failing suite never mutates engine config.
-	adoptCalibration(w, suite)
+	// persisted for every future invocation - but only when the gate passed
+	// and the user asked for it (--adopt). A plain benchmark run must not
+	// change the confidence every later investigation shows.
+	adoptCalibration(w, suite, adopt)
 	return nil
 }
 
@@ -291,10 +293,15 @@ func incorrectCount(suite *benchmark.SuiteResult) int {
 // adoptCalibration persists a validated temperature. It is the single place
 // the engine's operating temperature can change, and it defers entirely to
 // score.CalibrateLOO's Adopt decision — no call site re-implements the rule.
-// Writes nothing when adoption was refused.
-func adoptCalibration(w io.Writer, suite *benchmark.SuiteResult) {
+// Writes nothing when adoption was refused, or when persist is false (then
+// it only says how to persist the validated value).
+func adoptCalibration(w io.Writer, suite *benchmark.SuiteResult, persist bool) {
 	l := suite.LOO
 	if l == nil || !l.Adopt {
+		return
+	}
+	if !persist {
+		fmt.Fprintf(w, "calibrated temperature T=%.1f validated, not persisted (re-run with --adopt to use it)\n", l.Temperature)
 		return
 	}
 	if err := config.Save(config.Config{Temperature: l.Temperature}); err != nil {

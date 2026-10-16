@@ -22,6 +22,7 @@ func newEvaluateCmd() *cobra.Command {
 	var (
 		scenariosDir string
 		outFile      string
+		adopt        bool
 	)
 	cmd := &cobra.Command{
 		Use:   "evaluate [suite]",
@@ -41,10 +42,10 @@ Exit code 1 on any failure - CI gate.`,
 			if err != nil {
 				return err
 			}
-			// Calibration hardening: adopt a leave-one-out-validated
-			// temperature, persisted for every future invocation (server/MCP/CLI
-			// all load it at startup). adoptCalibration owns the whole rule.
-			adoptCalibration(io.Discard, suite)
+			// Calibration hardening: a leave-one-out-validated temperature is
+			// persisted (server/MCP/CLI all load it at startup) only with
+			// --adopt. adoptCalibration owns the whole rule.
+			adoptCalibration(io.Discard, suite, adopt)
 			report := evaluateMarkdown(suite)
 			if outFile != "" {
 				if werr := os.WriteFile(outFile, []byte(report), 0o644); werr != nil {
@@ -79,6 +80,7 @@ Exit code 1 on any failure - CI gate.`,
 	}
 	cmd.Flags().StringVar(&scenariosDir, "scenarios", "scenarios", "scenario suite directory")
 	cmd.Flags().StringVar(&outFile, "out", "", "write the markdown report to this file instead of stdout")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "persist the validated calibration temperature to the config file")
 	return cmd
 }
 
@@ -94,8 +96,8 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 
 	// Per-scenario results.
 	p("## Scenario results\n\n")
-	p("| scenario | status | top category | score | time | failures |\n")
-	p("|---|---|---|---:|---:|---|\n")
+	p("| scenario | status | expected | top category | score | time | failures |\n")
+	p("|---|---|---|---|---:|---:|---|\n")
 	passed, total := 0, len(suite.Results)
 	for _, r := range suite.Results {
 		status := "PASS"
@@ -107,7 +109,14 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 		default:
 			status = "FAIL"
 		}
-		cat := r.ExpectedCategory
+		// "top category" is what the engine chose; "expected" is the ground
+		// truth. The column used to print the expected value under the
+		// "top category" header.
+		want := r.ExpectedCategory
+		if want == "" {
+			want = "-"
+		}
+		cat := r.TopCategory
 		if cat == "" {
 			cat = "-"
 		}
@@ -119,7 +128,7 @@ func evaluateMarkdown(suite *benchmark.SuiteResult) string {
 		if r.Score == 0 {
 			score = "-"
 		}
-		p("| %s | %s | %s | %s | %s | %s |\n", r.Scenario, status, cat, score, r.Duration.Round(time.Millisecond), fails)
+		p("| %s | %s | %s | %s | %s | %s | %s |\n", r.Scenario, status, want, cat, score, r.Duration.Round(time.Millisecond), fails)
 	}
 	p("\n**Gate: %d/%d scenarios passed**\n\n", passed, total)
 

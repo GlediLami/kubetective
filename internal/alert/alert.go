@@ -354,9 +354,11 @@ func targetFromLabels(labels map[string]any) (model.ResourceRef, bool) {
 
 // kindNameRE recognizes "deployment/checkout", "pod checkout-7f84c9" etc.
 var (
-	kindSlashRE = regexp.MustCompile(`(?:^|\s|\()((?:deployment|pod|daemonset|statefulset|service|pvc|hpa))/([a-z0-9][a-z0-9.-]{0,63})`)
-	kindSpaceRE = regexp.MustCompile(`(?:^|\s|\()((?:deployment|pod|daemonset|statefulset|service))\s+([a-z0-9][a-z0-9.-]{0,63})`)
-	barePodRE   = regexp.MustCompile(`(?:^|\s|\()([a-z0-9][a-z0-9.-]{0,63})`)
+	kindNsSlashRE = regexp.MustCompile(`(?:^|\s|\()((?:deployment|pod|daemonset|statefulset|service|pvc|hpa))/([a-z0-9][a-z0-9-]{0,62})/([a-z0-9][a-z0-9.-]{0,63})`)
+	nsTextRE      = regexp.MustCompile(`(?:^|\s)(?:namespace|ns)\s*=\s*([a-z0-9][a-z0-9-]{0,62})|(?:^|\s)(?:-n|--namespace)\s+([a-z0-9][a-z0-9-]{0,62})|\sin\s+namespace\s+([a-z0-9][a-z0-9-]{0,62})`)
+	kindSlashRE   = regexp.MustCompile(`(?:^|\s|\()((?:deployment|pod|daemonset|statefulset|service|pvc|hpa))/([a-z0-9][a-z0-9.-]{0,63})`)
+	kindSpaceRE   = regexp.MustCompile(`(?:^|\s|\()((?:deployment|pod|daemonset|statefulset|service))\s+([a-z0-9][a-z0-9.-]{0,63})`)
+	barePodRE     = regexp.MustCompile(`(?:^|\s|\()([a-z0-9][a-z0-9.-]{0,63})`)
 )
 
 // targetFromText recognizes a k8s-style kind/name in free text. The bare
@@ -365,7 +367,31 @@ var (
 // mistaken for pods. Structured command text (Slack) relaxes this to a
 // single token, see parseSlack.
 func targetFromText(text string) (model.ResourceRef, bool) {
+	ref, ok := targetFromTextNoNS(text)
+	if ok && ref.Namespace == "" {
+		ref.Namespace = namespaceFromText(text)
+	}
+	return ref, ok
+}
+
+// namespaceFromText finds "namespace=prod", "ns=prod", "-n prod" or
+// "in namespace prod" in alert or command text.
+func namespaceFromText(text string) string {
+	for _, g := range nsTextRE.FindAllStringSubmatch(text, -1) {
+		for _, v := range g[1:] {
+			if v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
+func targetFromTextNoNS(text string) (model.ResourceRef, bool) {
 	clean := func(s string) string { return strings.Trim(s, ".,;:!?") }
+	if g := kindNsSlashRE.FindStringSubmatch(text); len(g) == 4 {
+		return model.ResourceRef{Kind: g[1], Namespace: g[2], Name: clean(g[3])}, true
+	}
 	for _, m := range []struct {
 		re *regexp.Regexp
 		fn func([]string) (model.ResourceRef, bool)
