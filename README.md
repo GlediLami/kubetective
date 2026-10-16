@@ -62,6 +62,10 @@ brew install gledilami/kubetective/kubetective
 go install github.com/GlediLami/kubetective/cmd/kubetective@latest
 ```
 
+The Homebrew formula lives in the tap repository
+[GlediLami/homebrew-kubetective](https://github.com/GlediLami/homebrew-kubetective).
+Each release updates it, so `brew upgrade kubetective` gets the new version.
+
 To use it as a `kubectl` plugin, put the `kubectl-investigate` binary on your
 `PATH`:
 
