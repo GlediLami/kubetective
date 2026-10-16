@@ -3,145 +3,437 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>KubeTective — Kubernetes incident investigation engine</title>
+  <title>KubeTective: find out why a Kubernetes workload broke</title>
+  <meta name="description" content="KubeTective investigates Kubernetes incidents. It collects the facts, ranks the possible causes and shows the evidence behind each one.">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
+  <header class="hero">
     <h1>KubeTective</h1>
-    <p class="tagline">Evidence-first Kubernetes incident investigation. Deterministic first, AI second.</p>
-    <nav>
-      <a href="#install">Install</a>
-      <a href="#quickstart">Quickstart</a>
-      <a href="#integrations">Integrations</a>
-      <a href="#scoring">Scoring &amp; calibration</a>
-      <a href="#ops">Operations</a>
-      <a href="#security">Security</a>
-      <a href="https://github.com/GlediLami/kubetective">GitHub</a>
-    </nav>
+    <p class="tagline">Find out why a Kubernetes workload broke, and what changed right before.</p>
+    <pre class="hero-cmd"><code>kubectl investigate deployment/checkout -n prod</code></pre>
+    <p class="hero-links">
+      <a class="button" href="#install">Install</a>
+      <a class="button ghost" href="#try">Try it without a cluster</a>
+      <a class="button ghost" href="https://github.com/GlediLami/kubetective">GitHub</a>
+    </p>
   </header>
 
+  <nav class="toc" aria-label="Contents">
+    <a href="#what">What it does</a>
+    <a href="#install">Install</a>
+    <a href="#try">Try it</a>
+    <a href="#usage">Everyday use</a>
+    <a href="#output">Reading the output</a>
+    <a href="#config">Config file</a>
+    <a href="#alerts">Alerts</a>
+    <a href="#servers">REST and MCP</a>
+    <a href="#cluster">Run in a cluster</a>
+    <a href="#limits">Limits</a>
+    <a href="#verify">Verify a release</a>
+  </nav>
+
   <main>
-    <section id="intro">
-      <p>KubeTective investigates Kubernetes incidents end to end: it collects deterministic
-      evidence (pod state, events, logs, deployment owner graph, HPA pressure, PVC, service,
-      GitOps CRs), builds a timeline and evidence graph, scores candidate root causes with a
-      calibrated, explainable model, and only then consults an LLM for narrative — never for
-      scoring. Every investigation is recorded and replayable; every recommendation is
-      evidence-linked; every action is human-gated.</p>
+    <section id="what">
+      <h2>What it does</h2>
+      <p>When a pod crashes, gets OOMKilled or stays Pending, <code>kubectl</code> tells you
+      the symptom. KubeTective looks for the cause. It reads the pod, its events, its logs and
+      its owners. It can also read Prometheus, Loki and your Git history. Then it builds a
+      timeline, ranks the possible causes and prints the evidence for each one.</p>
+
+<pre><code>$ kubectl investigate deployment/checkout -n prod
+╭──────────────────────────────────────────────────╮
+│ INCIDENT: deployment/prod/checkout               │
+│ Status: OOMKILLED                                │
+│ Severity: HIGH                                   │
+│ Confidence: 97%                                  │
+╰──────────────────────────────────────────────────╯
+
+ROOT CAUSE
+  Configuration regression: commit 9f2c1a7d (checkout: bump CACHE_SIZE
+  5000 -> 50000) preceded the failure
+
+EVIDENCE
+  ✓ commit 9f2c1a7d: checkout: bump CACHE_SIZE 5000 -> 50000 (+30)
+  ✓ commit 6 min before onset (+25)
+  ✓ workload observed changed in window (+10)
+  ✓ mechanism: failure follows the change (+30)
+
+RECOMMENDATION
+  roll back deployment/prod/checkout to the last known-good revision [MEDIUM]</code></pre>
+
+      <p>The verdict comes from rules, not from a language model. The same recording always
+      gives the same answer, and every point of the score is printed.</p>
+
+      <div class="cards">
+        <div class="card"><h3>Read-only by default</h3><p>Investigating never changes the
+        cluster. A fix runs only when you approve it with <code>--yes</code>.</p></div>
+        <div class="card"><h3>Every run is saved</h3><p>Each investigation is stored as a file.
+        You can replay it later, share it, or turn it into a test.</p></div>
+        <div class="card"><h3>Works offline</h3><p>No account, no API key, no telemetry. An
+        LLM is optional and can only reword the result.</p></div>
+      </div>
     </section>
 
     <section id="install">
       <h2>Install</h2>
-      <h3>Homebrew</h3>
+
+      <h3>Homebrew (macOS and Linux)</h3>
       <pre><code>brew install gledilami/kubetective/kubetective</code></pre>
-      <h3>kubectl plugin</h3>
-      <pre><code>make install-plugin   # puts kubectl-investigate on your PATH
-kubectl investigate deployment/checkout --since=30m</code></pre>
-      <h3>Binary / container</h3>
-      <pre><code># GitHub release assets (linux/darwin, amd64/arm64, deb, rpm)
-# container image:
-docker pull ghcr.io/gledilami/kubetective:latest</code></pre>
+      <p>This installs <code>kubetective</code> and the <code>kubectl investigate</code>
+      plugin. Update with <code>brew upgrade kubetective</code>.</p>
+
+      <h3>Go</h3>
+      <pre><code>go install github.com/GlediLami/kubetective/cmd/kubetective@latest
+go install github.com/GlediLami/kubetective/cmd/kubectl-investigate@latest</code></pre>
+      <p>Needs Go 1.26 or newer. The binaries land in <code>~/go/bin</code>.</p>
+
+      <h3>Download a binary or package</h3>
+      <p>The <a href="https://github.com/GlediLami/kubetective/releases/latest">release page</a>
+      has archives for Linux and macOS (amd64 and arm64), and <code>.deb</code> and
+      <code>.rpm</code> packages.</p>
+      <pre><code># Debian or Ubuntu
+sudo apt install ./kubetective_1.0.2_linux_amd64.deb
+
+# Fedora, RHEL or SUSE
+sudo dnf install ./kubetective_1.0.2_linux_amd64.rpm</code></pre>
+
+      <h3>Container image</h3>
+      <pre><code>docker pull ghcr.io/gledilami/kubetective:latest</code></pre>
+
+      <details>
+        <summary>Which one should I use?</summary>
+        <ul>
+          <li><strong>Homebrew</strong> on your laptop. It is the simplest and updates easily.</li>
+          <li><strong>go install</strong> if you already work with Go and have no Homebrew.</li>
+          <li><strong>.deb or .rpm</strong> on a Linux server or a jump host.</li>
+          <li><strong>Container image</strong> to run the REST server inside a cluster, or in CI.</li>
+        </ul>
+      </details>
     </section>
 
-    <section id="quickstart">
-      <h2>Quickstart</h2>
-      <pre><code># investigate a failing pod (or deployment, PVC, ...)
-kubectl investigate pod/checkout-7f84c9
-kubectl investigate deployment/checkout --since=2h
-
-# run as a kubectl plugin
-kubectl investigate deployment/checkout
-
-# preflight your environment
-kubetective doctor
-
-# replay a recorded incident
-kubetective replay &lt;incident-id&gt;
-
-# search the incident store
-kubetective incidents search --target checkout --since=7d --limit 10</code></pre>
-      <p>Every command above works with zero configuration against your current
-      kubeconfig. Optional sources (Prometheus, Loki, a git checkout) extend the evidence;
-      an optional OpenAI-compatible LLM adds narrative on top — never authority.</p>
+    <section id="try">
+      <h2>Try it without a cluster</h2>
+      <p>The repository ships recorded incidents. Replay one to see real output in a minute:</p>
+      <pre><code>git clone https://github.com/GlediLami/kubetective.git
+cd kubetective
+make build
+bin/kubetective replay scenarios/config-regression/record.jsonl</code></pre>
+      <p>Other recordings to try:</p>
+      <pre><code>bin/kubetective replay scenarios/crashloop/record.jsonl
+bin/kubetective replay scenarios/imagepull/record.jsonl
+bin/kubetective replay scenarios/pending-unschedulable/record.jsonl
+bin/kubetective replay scenarios/dns-failure/record.jsonl</code></pre>
+      <p>Then check that your own setup works:</p>
+      <pre><code>kubetective doctor</code></pre>
+      <p><code>doctor</code> checks your kubeconfig, cluster access, the incident store and
+      any Prometheus or Loki you configured. It exits with an error if something fails.</p>
     </section>
 
-    <section id="integrations">
-      <h2>Integrations</h2>
-      <h3>Investigate from an alert (PagerDuty, Grafana, Slack)</h3>
-      <pre><code># Grafana webhook payload -&gt; investigation
-kubetective alert grafana --file=alert.json
+    <section id="usage">
+      <h2>Everyday use</h2>
+      <p>KubeTective uses your current kubeconfig, like <code>kubectl</code>. Targets can be a
+      <code>deployment</code>, a <code>pod</code> or a <code>namespace</code>. Without
+      <code>-n</code>, the namespace of your current context is used.</p>
 
-# PagerDuty v2 webhook, or a Slack slash-command payload
-echo '{...pagerduty...}' | kubetective alert pagerduty
-echo '{"text":"deployment/checkout since=2h"}' | kubetective alert slack</code></pre>
-      <p>Zero API keys: the payload is parsed locally, the engine uses its existing cluster
-      access. Grafana <code>kubernetes_*</code> alert labels, PagerDuty incident titles, and
-      Slack command text all name the target; payloads without one fail with a readable
-      error instead of guessing.</p>
-      <h3>Completion webhook (outbound)</h3>
-      <pre><code># kubetective.yaml
-webhook_url: https://ops.example.com/kubetective
-webhook_secret: &lt;shared-secret&gt;</code></pre>
-      <p>Every investigation POSTs a notification signed with HMAC-SHA256
-      (<code>X-Kubetective-Signature</code>). Receivers must verify the signature before
-      parsing. Notification failure never fails the investigation.</p>
-      <h3>Servers</h3>
-      <p><code>kubetective serve</code> exposes <code>POST /v1/investigate</code>,
-      <code>GET /v1/incidents[/{id}]</code>, <code>/healthz</code> and <code>/metrics</code>;
-      <code>kubetective mcp</code> speaks the Model Context Protocol over stdio (read-only
-      tools).</p>
+      <h3>Investigate something that is broken</h3>
+      <pre><code># a deployment
+kubectl investigate deployment/checkout -n prod
+
+# one pod
+kubectl investigate pod/checkout-7f84c9 -n prod
+
+# the worst problem in a whole namespace
+kubectl investigate namespace/prod
+
+# look further back (default: 30 minutes)
+kubectl investigate deployment/checkout -n prod --since=2h
+
+# another cluster
+kubectl investigate deployment/checkout -n prod --context=staging</code></pre>
+
+      <h3>Link the failure to a commit</h3>
+      <p>Point it at the Git checkout of your manifests. Then it can name the commit that came
+      right before the failure:</p>
+      <pre><code>kubectl investigate deployment/checkout -n prod --git-repo ~/code/manifests</code></pre>
+      <p>Flux and Argo CD are read from the cluster automatically.</p>
+
+      <h3>Add metrics and logs</h3>
+      <pre><code># reach Prometheus and Loki from your laptop first
+kubectl -n monitoring port-forward svc/prometheus 9090:9090 &amp;
+kubectl -n monitoring port-forward svc/loki 3100:3100 &amp;
+
+kubectl investigate deployment/checkout -n prod \
+  --prometheus-url http://localhost:9090 \
+  --loki-url http://localhost:3100</code></pre>
+      <p>Every source is optional. A missing one shows up under EVIDENCE GAPS.</p>
+
+      <h3>Use the result in scripts</h3>
+      <pre><code>kubetective investigate deployment/checkout -n prod --format=json \
+  | jq '{status: .incident.status, cause: .hypotheses[0].claim}'</code></pre>
+      <pre><code>{
+  "status": "OOMKILLED",
+  "cause": "Memory exhaustion: container terminated with OOMKilled 1 time(s) (memory limit 32Mi) - 3 restart(s)"
+}</code></pre>
+
+      <h3>Look at past investigations</h3>
+      <pre><code># newest first
+kubetective incidents list
+
+# filter
+kubetective incidents search --target checkout --since 24h
+kubetective incidents search --analyzer oom --severity HIGH
+
+# has this happened before?
+kubetective incidents similar incident-1792155417-checkout
+
+# show one again
+kubetective replay incident-1792155417-checkout</code></pre>
+      <p>Records are stored in <code>~/.kubetective/incidents</code>.</p>
+
+      <h3>Fix it, with approval</h3>
+      <pre><code># preview: shows the action and the kubectl command it equals
+kubetective action incident-1792155417-checkout
+
+ACTION PREVIEW (read-only - nothing has been applied)
+  act-41cd35a3  rollback
+    target:  deployment/prod/checkout
+    dry run: kubectl rollout undo deployment/checkout -n prod --dry-run=client
+    risk:    MEDIUM
+
+# apply it (nothing happens without --yes)
+kubetective action incident-1792155417-checkout --apply act-41cd35a3 --yes</code></pre>
+      <p>Available actions are a deployment rollback and a pod restart.</p>
+
+      <h3>Share an incident safely</h3>
+      <pre><code>kubetective sanitize incident-1792155417-checkout
+# writes incident-1792155417-checkout.sanitized.jsonl</code></pre>
+      <p>Names and identifiers are replaced and secrets are scrubbed, but the verdict stays the
+      same. Read the file before you share it: scrubbing free text is pattern-based.</p>
+
+      <h3>Plain-language summary with an LLM (optional)</h3>
+      <pre><code># any OpenAI-compatible API, including a local Ollama
+kubectl investigate deployment/checkout -n prod --llm \
+  --llm-base-url http://localhost:11434/v1 --llm-model llama3.1</code></pre>
+      <p>The LLM gets a digest of the result and rewrites it. It cannot change the score, the
+      cause or the action.</p>
     </section>
 
-    <section id="scoring">
-      <h2>Scoring &amp; calibration</h2>
-      <p>Every score decomposes into the evidence lines that produced it, drawn from a
-      documented six-band weight scale. A fitted temperature is adopted only when the
-      benchmark can justify one: the suite must contain incorrect predictions, the fit must
-      sit inside its search grid, and it must beat the default out-of-sample on two
-      independent proper scoring rules (NLL and Brier) by a margin wider than noise.
-      Adoption stayed refused until the suite carried enough real failures to support one
-      &mdash; six live recordings later, at 71% measured accuracy, it does.</p>
-      <p>The decision deliberately does not run on expected calibration error. ECE is
-      binned, so on a suite whose confidences sit inside two buckets a single scenario can
-      swing the out-of-sample estimate by twenty points &mdash; and it did, flipping the
-      adopt/refuse verdict on every second scenario added. ECE is still reported, because
-      &ldquo;displayed confidence is off by this much&rdquo; is the number a human wants;
-      nothing hangs on it.</p>
-      <p>Four gates run in CI — scenario, mutation (delete a verdict's evidence, the verdict
-      must move), noise (bury it under 500 irrelevant observations, the verdict must hold),
-      and false-positive. The evaluation report is a published, per-release artifact:
-      <a href="https://github.com/GlediLami/kubetective/blob/main/reports/evaluation/latest.md">
-      reports/evaluation/latest.md</a>.</p>
-    </section>
+    <section id="output">
+      <h2>Reading the output</h2>
+      <dl>
+        <dt>Status, Severity, Confidence</dt>
+        <dd>What state the workload is in, how bad it is, and how sure the engine is about the
+        top cause.</dd>
+        <dt>ROOT CAUSE</dt>
+        <dd>The cause with the highest score.</dd>
+        <dt>EVIDENCE</dt>
+        <dd>The facts behind that score. <code>✓ ... (+25)</code> supports it,
+        <code>! ... (-6)</code> argues against it or marks something missing.</dd>
+        <dt>EVIDENCE GAPS</dt>
+        <dd>Sources that could not be read, for example no Prometheus configured or no access
+        to logs. A gap is shown, never hidden.</dd>
+        <dt>TIMELINE</dt>
+        <dd>Everything that happened in the window, relative to the start of the failure
+        (<code>t+0m</code>).</dd>
+        <dt>WHAT CHANGED</dt>
+        <dd>Changes in the window, ranked by how relevant they are.</dd>
+        <dt>RECOMMENDATION</dt>
+        <dd>What to do next, with a risk level. Nothing is applied automatically.</dd>
+      </dl>
+      <p>The last line prints the record id. Use it with <code>replay</code>,
+      <code>action</code> or <code>sanitize</code>.</p>
 
-    <section id="ops">
-      <h2>Operations</h2>
-      <ul>
-        <li><strong>Least-privilege RBAC</strong>: <code>deploy/rbac.yaml</code> — read-only
-        collector role, namespaced write role for human-gated rollback/restart actions.</li>
-        <li><strong>Structured logs</strong>: <code>--log-format json|text</code>; self-metrics
-        via <code>/metrics</code>; pprof behind <code>--pprof</code>.</li>
-        <li><strong>Records</strong>: JSONL incident store with a versioned schema — records
-        written by a newer engine are rejected loudly, never silently mis-read.</li>
+      <h3>What it detects</h3>
+      <ul class="columns">
+        <li>OOM kills</li>
+        <li>Crash loops</li>
+        <li>Image pull failures</li>
+        <li>Unschedulable pods</li>
+        <li>Node pressure</li>
+        <li>Failing liveness and readiness probes</li>
+        <li>Unbound PVCs</li>
+        <li>Service selector mismatches</li>
+        <li>HPA at its maximum</li>
+        <li>DNS failures</li>
+        <li>Changes linked to a Git or GitOps commit</li>
       </ul>
     </section>
 
-    <section id="security">
-      <h2>Security</h2>
-      <p>Incident records (which may carry log snippets) are owner-only on disk. The
-      completion webhook is HMAC-signed. Container images are distroless and run as a
-      non-root user. See
-      <a href="https://github.com/GlediLami/kubetective/blob/main/SECURITY.md">SECURITY.md</a>
-      and the
-      <a href="https://github.com/GlediLami/kubetective/blob/main/reports/security/review-v1.0.md">
-      v1.0 security review</a>.</p>
+    <section id="config">
+      <h2>Config file</h2>
+      <p>Put defaults in <code>~/.kubetective/kubetective.yaml</code> so you do not repeat
+      flags:</p>
+      <pre><code>namespace: payments
+since: 1h
+git_repo: ~/code/payments-manifests
+prometheus_url: http://localhost:9090
+loki_url: http://localhost:3100
+
+# different defaults per kubeconfig context
+clusters:
+  staging:
+    namespace: staging
+    loki_url: http://staging-loki:3100</code></pre>
+      <p>Flags win over environment variables, which win over the file. All options are in the
+      <a href="https://github.com/GlediLami/kubetective/blob/main/docs/configuration.md">configuration
+      reference</a>.</p>
     </section>
 
-    <footer>
-      <p>Apache-2.0 · <a href="https://github.com/GlediLami/kubetective">github.com/GlediLami/kubetective</a> ·
-      <a href="https://github.com/GlediLami/kubetective/blob/main/CHANGELOG.md">Changelog</a></p>
-    </footer>
+    <section id="alerts">
+      <h2>Start from an alert</h2>
+      <p>Give it the webhook body of an alert, and it investigates the workload the alert names.
+      No API keys are needed: the payload is read locally.</p>
+
+      <h3>Grafana</h3>
+      <pre><code>cat alert.json
+{"alerts":[{"labels":{"namespace":"prod","deployment":"checkout"}}]}
+
+kubetective alert grafana --file alert.json</code></pre>
+
+      <h3>Slack slash command</h3>
+      <pre><code>echo '{"text":"deployment/checkout namespace=prod since=2h"}' | kubetective alert slack</code></pre>
+      <p>The text understands <code>deployment/prod/checkout</code>,
+      <code>namespace=prod</code>, <code>-n prod</code> and <code>since=2h</code>.</p>
+
+      <h3>PagerDuty</h3>
+      <pre><code>echo '{"event":"incident.triggered","data":{"incident":{"title":"OOMKilled deployment/prod/checkout"}}}' \
+  | kubetective alert pagerduty</code></pre>
+
+      <h3>Get notified when it is done</h3>
+      <pre><code># kubetective.yaml
+webhook_url: https://ops.example.com/kubetective
+webhook_secret: change-me</code></pre>
+      <p>After every investigation, KubeTective sends a POST signed with HMAC-SHA256 in the
+      <code>X-Kubetective-Signature</code> header. Check the signature before you trust the
+      body.</p>
+    </section>
+
+    <section id="servers">
+      <h2>REST and MCP</h2>
+
+      <h3>REST server</h3>
+      <pre><code>kubetective serve --listen 127.0.0.1:8080
+
+curl -s localhost:8080/v1/investigate \
+  -H 'content-type: application/json' \
+  -d '{"target":"deployment/checkout","namespace":"prod","since_minutes":30}' \
+  | jq '.hypotheses[0].claim'
+
+curl -s localhost:8080/v1/incidents          # list records
+curl -s localhost:8080/v1/incidents/&lt;id&gt;     # one record
+open http://localhost:8080/                  # read-only web view</code></pre>
+      <p>The server has no login. Keep it on localhost, or put it behind something that
+      handles auth. Details: <a href="https://github.com/GlediLami/kubetective/blob/main/docs/api.md">API
+      reference</a> and the <a href="https://github.com/GlediLami/kubetective/blob/main/docs/openapi.yaml">OpenAPI
+      spec</a>.</p>
+
+      <h3>MCP server (for AI assistants)</h3>
+      <p>Lets an assistant such as Claude call KubeTective. The tools are
+      <code>investigate</code>, <code>replay</code>, <code>list_incidents</code>,
+      <code>read_incident</code> and <code>action_preview</code>. None of them changes the
+      cluster.</p>
+      <pre><code># Claude Code
+claude mcp add kubetective -- kubetective mcp</code></pre>
+      <pre><code>// other clients: add to the client's MCP config
+{
+  "mcpServers": {
+    "kubetective": { "command": "kubetective", "args": ["mcp"] }
+  }
+}</code></pre>
+    </section>
+
+    <section id="cluster">
+      <h2>Run it inside a cluster</h2>
+      <p><code>deploy/rbac.yaml</code> gives read access to what KubeTective needs. Write
+      access (rollback, restart) is limited to the namespaces you choose. Edit the
+      <code>prod</code> namespace in the file first.</p>
+      <pre><code>kubectl create namespace kubetective
+kubectl apply -f https://raw.githubusercontent.com/GlediLami/kubetective/main/deploy/rbac.yaml
+
+kubectl -n kubetective create deployment kubetective \
+  --image=ghcr.io/gledilami/kubetective:latest --port=8080
+kubectl -n kubetective set serviceaccount deployment/kubetective kubetective
+kubectl -n kubetective port-forward deployment/kubetective 8080:8080</code></pre>
+      <p>The image runs <code>kubetective serve --listen :8080</code> as a non-root user.</p>
+
+      <h3>Or run the image locally</h3>
+      <pre><code>docker run --rm --user "$(id -u)" \
+  -v ~/.kube/config:/kube/config:ro -e KUBECONFIG=/kube/config \
+  ghcr.io/gledilami/kubetective:latest investigate deployment/checkout -n prod</code></pre>
+      <p>For a local kind or minikube cluster, add <code>--network host</code>.</p>
+    </section>
+
+    <section id="limits">
+      <h2>Known limits</h2>
+      <ul>
+        <li>When no analyzer matches, the engine can fall back to "Configuration regression: a
+        change preceded the incident" at about 65 to 79%, without naming a commit. A missing
+        Secret mount is one such case. Read that verdict as "unknown".</li>
+        <li><code>namespace/...</code> shows only the strongest problem. Investigate a
+        deployment or pod to see the others.</li>
+        <li><code>service/...</code> targets are not supported yet. Investigate the deployment
+        behind the service.</li>
+      </ul>
+      <p>The engine is tested on 25 recorded incidents on every commit. It gets 17 right. The
+      8 misses stay in the suite on purpose, so the confidence numbers stay honest. See the
+      <a href="https://github.com/GlediLami/kubetective/blob/main/reports/evaluation/latest.md">evaluation
+      report</a>.</p>
+    </section>
+
+    <section id="verify">
+      <h2>Verify a release</h2>
+      <p>Releases are signed with <a href="https://www.sigstore.dev/">Sigstore</a> cosign,
+      without a long-lived key. The signature proves the files were built by the release
+      workflow of this repository. Each archive also comes with an SBOM, a list of every
+      library inside it.</p>
+      <pre><code>VERSION=v1.0.2
+gh release download "$VERSION" --repo GlediLami/kubetective --pattern '*checksums.txt*'
+
+cosign verify-blob kubetective_1.0.2_checksums.txt \
+  --signature kubetective_1.0.2_checksums.txt.sig \
+  --certificate kubetective_1.0.2_checksums.txt.pem \
+  --certificate-identity-regexp '^https://github\.com/GlediLami/kubetective/\.github/workflows/release\.yml@refs/tags/' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+# then check a downloaded file against the list
+sha256sum --ignore-missing -c kubetective_1.0.2_checksums.txt</code></pre>
+      <p>More in <a href="https://github.com/GlediLami/kubetective/blob/main/SECURITY.md">SECURITY.md</a>.</p>
+    </section>
+
+    <section id="more">
+      <h2>More</h2>
+      <ul>
+        <li><a href="https://github.com/GlediLami/kubetective/blob/main/docs/cli.md">CLI reference</a>: every command and flag</li>
+        <li><a href="https://github.com/GlediLami/kubetective/blob/main/docs/architecture.md">Architecture</a>: how the pipeline works</li>
+        <li><a href="https://github.com/GlediLami/kubetective/blob/main/scenarios/README.md">Benchmark scenarios</a>: how the engine is tested</li>
+        <li><a href="https://github.com/GlediLami/kubetective/blob/main/CONTRIBUTING.md">Contributing</a>: the most useful contribution is a real incident (<code>kubetective scenario new &lt;id&gt;</code>)</li>
+      </ul>
+    </section>
   </main>
+
+  <footer>
+    <p>Apache-2.0 · <a href="https://github.com/GlediLami/kubetective">GitHub</a> ·
+    <a href="https://github.com/GlediLami/kubetective/blob/main/CHANGELOG.md">Changelog</a> ·
+    <a href="https://github.com/GlediLami/kubetective/issues">Report a problem</a></p>
+  </footer>
+
+  <script>
+    // Copy button on every code block.
+    document.querySelectorAll('pre').forEach(function (pre) {
+      var btn = document.createElement('button');
+      btn.className = 'copy';
+      btn.type = 'button';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', function () {
+        var code = pre.querySelector('code');
+        navigator.clipboard.writeText((code ? code.innerText : pre.innerText).trim()).then(function () {
+          btn.textContent = 'Copied';
+          setTimeout(function () { btn.textContent = 'Copy'; }, 1500);
+        });
+      });
+      pre.appendChild(btn);
+    });
+  </script>
 </body>
 </html>
