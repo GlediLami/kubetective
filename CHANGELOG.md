@@ -6,6 +6,43 @@ does **not** yet follow Semantic Versioning (0.x - API may change).
 
 ## [Unreleased]
 
+Fixes from a live check on a kind cluster (Kubernetes v1.36).
+
+### Security
+
+- The REST endpoint `GET /v1/incidents/{id}`, the web UI and the MCP tools
+  (`read_incident`, `replay`, `action_preview`) accepted a file path as the
+  incident id, so any readable `.jsonl` file on the host could be returned.
+  Ids from the network are now plain record names in the store
+  (`record.Store.LoadID`). The CLI still accepts paths.
+
+### Fixed
+
+- DNS analyzer: a healthy coreDNS with no DNS-related event no longer creates
+  a hypothesis. It used to make "DNS resolution failure (0 DNS errors)" the
+  top cause for healthy workloads.
+- Crash loop analyzer: a non-zero exit after at least two restarts is a crash
+  loop even between back-offs, so the verdict no longer depends on when the
+  investigation runs. The exit code is also read from the container's last
+  termination state.
+- `namespace/<name>` targets listed pods in the empty namespace and found
+  almost nothing. They now collect the named namespace.
+- Targets without a namespace (Slack and PagerDuty alerts, bare CLI targets)
+  use the settings namespace, then the kubeconfig context namespace, then
+  `default`. Alert text also understands `deployment/ns/name`,
+  `namespace=ns`, `-n ns` and `in namespace ns`.
+- The incident store follows `KUBETECTIVE_HOME`, so `doctor` checks the
+  directory records are written to.
+- `evaluate` printed the expected category under "top category". It now shows
+  both columns.
+- The printed dry-run command of an action includes `-n <namespace>`.
+
+### Changed
+
+- `benchmark` and `evaluate` no longer write the calibrated temperature to
+  `config.json` on every run. Pass `--adopt` to persist it.
+- README rewritten in plain language, with a "Known limits" section.
+
 ## [1.0.1] - 2026-08-16
 
 Post-1.0 hardening. The theme is honesty about what the engine can and cannot

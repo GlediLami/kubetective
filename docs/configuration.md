@@ -63,7 +63,8 @@ calibration state, cluster connectivity, incident store, and Prometheus/Loki
 reachability. It exits non-zero if anything fails, so it works in CI.
 
 The calibrated scoring temperature is persisted to `~/.kubetective/config.json` by
-`benchmark`/`evaluate` and loaded by every invocation.
+`benchmark --adopt` or `evaluate --adopt`, and loaded by every invocation. Without
+`--adopt`, both commands only report the validated value.
 
 ## LLM explainer (optional)
 
